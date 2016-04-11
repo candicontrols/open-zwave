@@ -54,9 +54,11 @@ Msg::Msg
 	m_logText( _logText ),
 	m_bFinal( false ),
 	m_bCallbackRequired( _bCallbackRequired ),
+	m_security(false),
 	m_callbackId( 0 ),
 	m_expectedReply( 0 ),
 	m_expectedCommandClassId( _expectedCommandClassId ),
+	m_duplicateClassId( 0 ),
 	m_length( 4 ),
 	m_targetNodeId( _targetNodeId ),
 	m_sendAttempts( 0 ),
@@ -125,6 +127,32 @@ void Msg::Append
 {
 	m_buffer[m_length++] = _data;
 }
+
+void Msg::AppendDuplicateClassId
+(
+  uint8 const _data
+)
+{
+  m_duplicateClassId = _data;
+  Append(_data);
+}
+
+bool Msg::Consolidate
+(
+  Msg *_other 
+)
+{
+  if (m_duplicateClassId && (m_duplicateClassId == _other->m_duplicateClassId)) {
+    if (m_targetNodeId == _other->m_targetNodeId) {
+      //memcpy_s(m_buffer, _other->m_buffer, m_length);
+      //m_bFinal = false;
+      //Finalize();
+      return true;
+    }
+  }
+  return false;
+}
+
 
 //-----------------------------------------------------------------------------
 // <Msg::Finalize>

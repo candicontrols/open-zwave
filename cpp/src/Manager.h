@@ -57,7 +57,7 @@ namespace OpenZWave
 	class ValueList;
 	class ValueShort;
 	class ValueString;
-	class ValueRaw;
+  class ValueRaw;
 
 	/** \brief
 	 *   The main public interface to OpenZWave.
@@ -172,6 +172,7 @@ namespace OpenZWave
 
 		bool					m_exit;										// Flag indicating that program exit is in progress.
 		static Manager*			s_instance;									// Pointer to the instance of the Manager singleton.
+		bool m_batteryMode;                      // Run in battery mode.  No query, no config save
 
 	//-----------------------------------------------------------------------------
 	// Configuration
@@ -200,6 +201,8 @@ namespace OpenZWave
 		 * \see Create
 		 */
 		Options* GetOptions()const{ return m_options; }
+		
+		void SetBatteryMode(bool mode) { m_batteryMode = mode; }
 	/*@}*/
 
 	private:
@@ -246,13 +249,13 @@ namespace OpenZWave
 		 */
 		uint8 GetControllerNodeId( uint32 const _homeId );
 
-		/**
-		 * \brief Get the node ID of the Static Update Controller.
-		 * \param _homeId The Home ID of the Z-Wave controller.
-		 * \return the node ID of the Z-Wave controller.
-		 */
-		uint8 GetSUCNodeId( uint32 const _homeId );
-
+    /**
+     * \brief Get the node ID of the Static Update Controller.
+     * \param _homeId The Home ID of the Z-Wave controller.
+     * \return the node ID of the Z-Wave controller.
+     */
+    uint8 GetSUCNodeId( uint32 const _homeId );
+        
 		/**
 		 * \brief Query if the controller is a primary controller.
 		 * The primary controller is the main device used to configure and control a Z-Wave network.
@@ -287,6 +290,8 @@ namespace OpenZWave
 		 */
 		bool IsBridgeController( uint32 const _homeId );
 
+    bool FlushPollQueue( uint32 const _homeId );
+    
 		/**
 		 * \brief Get the version of the Z-Wave API library used by a controller.
 		 * \param _homeId The Home ID of the Z-Wave controller.
@@ -497,6 +502,14 @@ OPENZWAVE_EXPORT_WARNINGS_ON
 		 */
 		bool IsNodeSecurityDevice( uint32 const _homeId, uint8 const _nodeId );
 
+		/**
+		 * \brief Get the security attribute for a node. True if node supports security features.
+		 * \param _homeId The Home ID of the Z-Wave controller that manages the node.
+		 * \param _nodeId The ID of the node to query.
+		 * \return true if security features implemented.
+		 */
+		Node::SecurityState GetSecurityState( uint32 const _homeId, uint8 const _nodeId );
+		
 		/**
 		 * \brief Get the maximum baud rate of a node's communications
 		 * \param _homeId The Home ID of the Z-Wave controller that manages the node.
@@ -1186,11 +1199,12 @@ OPENZWAVE_EXPORT_WARNINGS_ON
 		 * A call to this function causes the library to send a message to the network to retrieve the current value
 		 * of the specified ValueID (just like a poll, except only one-time, not recurring).
 		 * \param _id The unique identifier of the value to be refreshed.
+     * \param _poll Request at lower poll priority if true
 		 * \return true if the driver and node were found; false otherwise
 		 * \throws OZWException with Type OZWException::OZWEXCEPTION_INVALID_VALUEID if the ValueID is invalid
 		 * \throws OZWException with Type OZWException::OZWEXCEPTION_INVALID_HOMEID if the Driver cannot be found
 		 */
-		bool RefreshValue( ValueID const& _id);
+		bool RefreshValue( ValueID const& _id, bool _poll = false);
 
 		/**
 		 * \brief Sets a flag indicating whether value changes noted upon a refresh should be verified.  If so, the
@@ -1203,6 +1217,7 @@ OPENZWAVE_EXPORT_WARNINGS_ON
 		 * \sa Manager::GetChangeVerified
 		 */
 		void SetChangeVerified( ValueID const& _id, bool _verify );
+    //void SetRefresh( ValueID const& _id, bool _verify );
 
 		/**
 		 * \brief determine if value changes upon a refresh should be verified.  If so, the
@@ -1387,8 +1402,8 @@ OPENZWAVE_EXPORT_WARNINGS_ON
 		 * \return true if the a message setting the value was sent to the device.
 		 * \see RequestConfigParam
 		 */
-		bool SetConfigParam( uint32 const _homeId, uint8 const _nodeId, uint8 const _param, int32 _value, uint8 const _size = 2 );
-
+		bool SetConfigParam( uint32 const _homeId, uint8 const _nodeId, uint8 const _param, int32 _value, uint8 const _size = 2, bool const _raw = false );
+    
 		/**
 		 * \brief Request the value of a configurable parameter from a device.
 		 * Some devices have various parameters that can be configured to control the device behaviour.

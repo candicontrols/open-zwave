@@ -31,6 +31,8 @@
 #include <stdio.h>
 #include <sys/time.h>
 
+#include <stdlib.h>
+
 using namespace OpenZWave;
 
 //-----------------------------------------------------------------------------
@@ -53,6 +55,7 @@ EventImpl::EventImpl
 	pthread_condattr_t ca;
 	pthread_condattr_init( &ca );
 	pthread_condattr_setpshared( &ca, PTHREAD_PROCESS_PRIVATE );
+  pthread_condattr_setclock( &ca, CLOCK_MONOTONIC);
 	pthread_cond_init( &m_condition, &ca );
 	pthread_condattr_destroy( &ca );
 }
@@ -184,11 +187,12 @@ bool EventImpl::Wait
 	        }
 	        else if( _timeout > 0 )
 		{
+#if 0
 			struct timeval now;
-			struct timespec abstime;
+      struct timespec abstime;
 
 			gettimeofday(&now, NULL);
-            
+      
 			abstime.tv_sec = now.tv_sec + (_timeout / 1000);
 
 			// Now add the remainder of our timeout to the microseconds part of 'now'
@@ -203,13 +207,32 @@ bool EventImpl::Wait
 			}
             
 			abstime.tv_nsec = now.tv_usec * 1000;
-            
+#else
+      struct timespec now;
+      
+      clock_gettime(CLOCK_MONOTONIC, &now);
+      //printf("timeout: %d\n", _timeout);
+      //printf("before: %d %d\n", (int)now.tv_sec, (int)now.tv_nsec);
+      
+      now.tv_sec  += _timeout / 1000;
+      now.tv_nsec += (_timeout % 1000) * 1000 * 1000;
+      if (now.tv_nsec >= (1000 * 1000 * 1000)) {
+        now.tv_sec++;
+        now.tv_nsec -= (1000 * 1000 * 1000);
+      }
+      
+      //printf("after: %d %d\n", (int)now.tv_sec, (int)now.tv_nsec);
+#endif     
+      
 			while( !m_isSignaled )
 			{
 				int oldstate;
 				pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &oldstate);
 
-				err = pthread_cond_timedwait( &m_condition, &m_lock, &abstime );
+        //printf("wait %d ms\n", _timeout);
+//				err = pthread_cond_timedwait( &m_condition, &m_lock, &abstime);
+        err = pthread_cond_timedwait( &m_condition, &m_lock, &now );
+       //printf("done wait %d ms: %d\n", _timeout, m_isSignaled);
 
 				pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &oldstate);
 

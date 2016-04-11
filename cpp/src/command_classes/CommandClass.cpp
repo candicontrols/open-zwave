@@ -209,7 +209,7 @@ void CommandClass::ReadXML
 	TiXmlElement const* _ccElement
 )
 {
-	int32 intVal;
+	int32 intVal = 0;
 	char const* str;
 
 	if( TIXML_SUCCESS == _ccElement->QueryIntAttribute( "version", &intVal ) )
@@ -746,11 +746,14 @@ void CommandClass::UpdateMappedClass
 {
 	if( _classId )
 	{
+   //   Log::Write(LogLevel_Info, GetNodeId(), "Get Command class: %d (%x) %d", _classId, _classId, _level);
 		if( Node* node = GetNodeUnsafe() )
 		{
 			CommandClass* cc = node->GetCommandClass( _classId );
-			if( node->GetCurrentQueryStage() == Node::QueryStage_Complete && cc != NULL )
+      Log::Write(LogLevel_Info, GetNodeId(), "%zd %d", cc, node->GetCurrentQueryStage());
+			if(/*(node->IsListeningDevice() ||  node->GetCurrentQueryStage() == Node::QueryStage_Complete) && */cc != NULL )
 			{
+     //   Log::Write(LogLevel_Info, GetNodeId(), "Really update mapped class");
 				cc->SetValueBasic( _instance, _level );
 			}
 		}

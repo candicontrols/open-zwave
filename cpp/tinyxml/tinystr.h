@@ -41,6 +41,10 @@ distribution.
 
 #include <assert.h>
 #include <string.h>
+//#include <stdlib.h>
+//#include <string>
+
+#include "candi_s.h"
 
 /*	The support for explicit isn't that universal, and it isn't really
 	required - it is used to check that the TiXmlString class isn't incorrectly
@@ -83,21 +87,21 @@ class TiXmlString
 	TiXmlString ( const TiXmlString & copy) : rep_(0)
 	{
 		init(copy.length());
-		memcpy(start(), copy.data(), length());
+		memcpy_s(start(), length(), copy.data(), length());
 	}
 
 	// TiXmlString constructor, based on a string
 	TIXML_EXPLICIT TiXmlString ( const char * copy) : rep_(0)
 	{
 		init( static_cast<size_type>( strlen(copy) ));
-		memcpy(start(), copy, length());
+		memcpy_s(start(), length(), copy, length());
 	}
 
 	// TiXmlString constructor, based on a string
 	TIXML_EXPLICIT TiXmlString ( const char * str, size_type len) : rep_(0)
 	{
 		init(len);
-		memcpy(start(), str, len);
+		memcpy_s(start(), len, str, len);
 	}
 
 	// TiXmlString destructor

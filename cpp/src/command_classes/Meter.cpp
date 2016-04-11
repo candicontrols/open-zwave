@@ -114,7 +114,7 @@ static char const* c_waterUnits[] =
 static char const* c_electricityLabels[] =
 {
 	"Energy",
-	"Energy",
+	"Energy (kVAh)",
 	"Power",
 	"Count",
 	"Voltage",
@@ -167,6 +167,7 @@ bool Meter::RequestState
 
 	if( _requestFlags & RequestFlag_Dynamic )
 	{
+    Log::Write( LogLevel_Info, GetNodeId(), "RequestState");
 		res |= RequestValue( _requestFlags, 0, _instance, _queue );
 	}
 
@@ -180,7 +181,7 @@ bool Meter::RequestState
 bool Meter::RequestValue
 (
 	uint32 const _requestFlags,
-	uint8 const _dummy1,	// = 0 (not used)
+	uint8 const _index,
 	uint8 const _instance,
 	Driver::MsgQueue const _queue
 )
@@ -194,16 +195,19 @@ bool Meter::RequestValue
 	for( uint8 i=0; i<8; ++i )
 	{
 		uint8 baseIndex = i<<2;
-
+		if (_requestFlags != RequestFlag_Dynamic && _index != baseIndex) continue;
+                
 		Value* value = GetValue( _instance, baseIndex );
 		if( value != NULL )
 		{
 			value->Release();
-			Msg* msg = new Msg( "MeterCmd_Get", GetNodeId(), REQUEST, FUNC_ID_ZW_SEND_DATA, true, true, FUNC_ID_APPLICATION_COMMAND_HANDLER, GetCommandClassId() );
+			char message[40];
+			snprintf(message, sizeof(message), "MeterCmd_Get (%d)", baseIndex);
+			Msg* msg = new Msg( message, GetNodeId(), REQUEST, FUNC_ID_ZW_SEND_DATA, true, true, FUNC_ID_APPLICATION_COMMAND_HANDLER, GetCommandClassId() );
 			msg->SetInstance( this, _instance );
 			msg->Append( GetNodeId() );
 			msg->Append( 3 );
-			msg->Append( GetCommandClassId() );
+			msg->AppendDuplicateClassId( GetCommandClassId() );
 			msg->Append( MeterCmd_Get );
 			msg->Append( (uint8)( i << 3 ) );
 			msg->Append( GetDriver()->GetTransmitOptions() );
@@ -262,6 +266,8 @@ bool Meter::HandleSupportedReport
 	if( Node* node = GetNodeUnsafe() )
 	{
 		string msg;
+		string valueLabel;
+
 		msg = c_meterTypes[meterType];
 		msg += ": ";
 		// Create the list of supported scales
@@ -283,6 +289,7 @@ bool Meter::HandleSupportedReport
 					{
 						if( ValueDecimal* value = static_cast<ValueDecimal*>( GetValue( _instance, baseIndex ) ) )
 						{
+             //Log::Write( LogLevel_Info, GetNodeId(), "Setting values for Electric: %s %s index: %d", c_electricityLabels[i], c_electricityUnits[i], baseIndex);
 							value->SetLabel( c_electricityLabels[i] );
 							value->SetUnits( c_electricityUnits[i] );
 							value->Release();
@@ -477,7 +484,9 @@ bool Meter::HandleReport
 					// We need to create a value to hold the previous
 					if( Node* node = GetNodeUnsafe() )
 					{
-						node->CreateValueDecimal( ValueID::ValueGenre_User, GetCommandClassId(), _instance, baseIndex+1, "Previous Reading", value->GetUnits().c_str(), true, false, "0.0", 0 );
+						string plabel = "Previous Reading (" + value->GetLabel() + ")";
+						
+						node->CreateValueDecimal( ValueID::ValueGenre_User, GetCommandClassId(), _instance, baseIndex+1, plabel, value->GetUnits().c_str(), true, false, "0.0", 0 );
 						previous = static_cast<ValueDecimal*>( GetValue( _instance, baseIndex+1 ) );
 					}
 				}
@@ -555,8 +564,8 @@ void Meter::CreateVars
 	uint8 const _instance
 )
 {
-	if( Node* node = GetNodeUnsafe() )
+	/*if( Node* node = GetNodeUnsafe() )
 	{
 		node->CreateValueDecimal( ValueID::ValueGenre_User, GetCommandClassId(), _instance, 0, "Unknown", "", true, false, "0.0", 0 );
-	}
+	}*/
 }

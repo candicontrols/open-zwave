@@ -29,6 +29,8 @@
 #include "platform/Mutex.h"
 #include "platform/Log.h"
 
+#include "candi_s.h"
+
 #include <string.h>
 
 #include <cstdio>
@@ -106,14 +108,14 @@ bool Stream::Get
 		uint32 block1 = m_bufferSize - m_tail;
 		uint32 block2 = _size - block1;
 
-		memcpy( _buffer, &m_buffer[m_tail], block1 );
-		memcpy( &_buffer[block1], m_buffer, block2 );
+		memcpy_s( _buffer, block1,  &m_buffer[m_tail], block1 );
+		memcpy_s( &_buffer[block1], block2, m_buffer, block2 );
 		m_tail = block2;
 	}
 	else
 	{
 		// Requested data is in a contiguous block
-		memcpy( _buffer, &m_buffer[m_tail], _size );
+		memcpy_s( _buffer, _size, &m_buffer[m_tail], _size );
 		m_tail += _size;
 	}
 
@@ -148,8 +150,8 @@ bool Stream::Put
 		uint32 block1 = m_bufferSize - m_head;
 		uint32 block2 = _size - block1;
 
-		memcpy( &m_buffer[m_head], _buffer, block1 );
-		memcpy( m_buffer, &_buffer[block1], block2 );
+		memcpy_s( &m_buffer[m_head], block1, _buffer, block1 );
+		memcpy_s( m_buffer, block2, &_buffer[block1], block2 );
 		m_head = block2;
 		LogData( m_buffer + m_head - block1, block1, "      Read (controller->buffer):  ");
 		LogData( m_buffer, block2, "      Read (controller->buffer):  ");
@@ -157,7 +159,7 @@ bool Stream::Put
 	else
 	{
 		// There is enough space before we reach the end of the buffer
-		memcpy( &m_buffer[m_head], _buffer, _size );
+		memcpy_s( &m_buffer[m_head], _size, _buffer, _size );
 		m_head += _size;
 		LogData(m_buffer+m_head-_size, _size, "      Read (controller->buffer):  ");
 	}

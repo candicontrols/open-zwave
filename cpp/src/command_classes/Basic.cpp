@@ -61,7 +61,9 @@ Basic::Basic
 	CommandClass( _homeId, _nodeId ),
 	m_mapping( 0 ),
 	m_ignoreMapping( false ),
-	m_setAsReport( false )
+	//m_setAsReport( false )
+	m_setAsReport( true ) // Upstream this is true, but because of the possible loss of info about battery devices/sensors, make this 
+                        // always true.  This is always what we want in Zuul in any case. 
 {
 }
 
@@ -94,7 +96,7 @@ void Basic::ReadXML
 	str = _ccElement->Attribute("setasreport");
 	if( str )
 	{
-		m_setAsReport = !strcmp( str, "true");
+		//m_setAsReport = !strcmp( str, "true");
 	}
 }
 
@@ -208,10 +210,12 @@ bool Basic::HandleMsg
 			Log::Write( LogLevel_Info, GetNodeId(), "Received Basic set from node %d: level=%d. Treating it as a Basic report.", GetNodeId(), _data[1] );
 			if( !m_ignoreMapping && m_mapping != 0 )
 			{
+        //Log::Write( LogLevel_Info, GetNodeId(), "UpdateMappedClass: %d", _data[1]);
 				UpdateMappedClass( _instance, m_mapping, _data[1] );
 			}
 			else if( ValueByte* value = static_cast<ValueByte*>( GetValue( _instance, 0 ) ) )
 			{
+         //Log::Write( LogLevel_Info, GetNodeId(), "Update Basic Value");
 				value->OnValueRefreshed( _data[1] );
 				value->Release();
 			}

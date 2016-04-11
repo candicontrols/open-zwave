@@ -62,7 +62,7 @@ ValueRaw::ValueRaw
 	m_newValue ( NULL )
 {
 	m_value = new uint8[_length];
-	memcpy( m_value, _value, _length );
+	memcpy_s( m_value, _length, _value, _length );
 	m_min = 0;
 	m_max = 0;
 }
@@ -237,7 +237,7 @@ bool ValueRaw::Set
 	// create a temporary copy of this value to be submitted to the Set() call and set its value to the function param
   	ValueRaw* tempValue = new ValueRaw( *this );
 	tempValue->m_value = new uint8[_length];
-	memcpy( tempValue->m_value, _value, _length );
+	memcpy_s( tempValue->m_value, _length, _value, _length );
 	tempValue->m_valueLength = _length;
 
 	// Set the value in the device.
@@ -269,7 +269,7 @@ void ValueRaw::OnValueRefreshed
 			delete [] m_valueCheck;
 		}
 		m_valueCheck = new uint8[_length];
-		memcpy( m_valueCheck, _value, _length );
+		memcpy_s( m_valueCheck, _length, _value, _length );
 		break;
 	case 2:		// value has changed (confirmed), save _value in m_value
 		if( m_value != NULL )
@@ -277,7 +277,7 @@ void ValueRaw::OnValueRefreshed
 			delete [] m_value;
 		}
 		m_value = new uint8[_length];
-		memcpy( m_value, _value, _length );
+		memcpy_s( m_value, _length, _value, _length );
 		break;
 	case 3:		// all three values are different, so wait for next refresh to try again
 		break;

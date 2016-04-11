@@ -68,15 +68,25 @@ namespace OpenZWave
 		virtual void ReadXML( uint32 const _homeId, uint8 const _nodeId, uint8 const _commandClassId, TiXmlElement const* _valueElement );
 		virtual void WriteXML( TiXmlElement* _valueElement );
 
-		Item const& GetItem()const{ return m_items[m_valueIdx]; }
+		Item const& GetItem()const { 
+			if (m_items.size() == 0) {
+				Item *item = new Item();
+				
+				item->m_label = "";
+				item->m_value = 0;
+				return *item;
+			}
+			assert(m_valueIdx >=0 && m_valueIdx < (int)m_items.size()); 
+			return m_items[m_valueIdx]; 
+		}
 		Item const& GetNewItem()const{ return m_items[m_newValueIdx]; }
 
-		int32 const GetItemIdxByLabel( string const& _label );
-		int32 const GetItemIdxByValue( int32 const _value );
+		int32 GetItemIdxByLabel( string const& _label );
+		int32 GetItemIdxByValue( int32 const _value );
 
 		bool GetItemLabels( vector<string>* o_items );
 
-		uint8 const GetSize()const{ return m_size; }
+		uint8 GetSize()const{ return m_size; }
 
 	private:
 		vector<Item>	m_items;

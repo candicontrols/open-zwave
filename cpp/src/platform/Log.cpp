@@ -210,10 +210,10 @@ bool Log::GetLoggingState
 //	Write to the log
 //-----------------------------------------------------------------------------
 void Log::Write
-(
+( 
 	LogLevel _level,
 	char const* _format,
-	...
+	... 
 )
 {
 	if( s_instance && s_dologging && s_instance->m_pImpl )
@@ -290,7 +290,7 @@ void Log::QueueClear
 //-----------------------------------------------------------------------------
 void Log::SetLogFileName
 (
-	const string &_filename
+	string _filename
 )
 {
 	if( s_instance && s_dologging && s_instance->m_pImpl )

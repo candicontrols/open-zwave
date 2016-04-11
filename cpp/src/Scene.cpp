@@ -148,7 +148,12 @@ void Scene::WriteXML
 	}
 
 	string userPath;
-	Options::Get()->GetOptionAsString( "UserPath", &userPath );
+//#if defined(__arm__) || defined(__mips__)
+	userPath = "/etc/openzwave/";
+//#else
+	//Options::Get()->GetOptionAsString( "UserPath", &userPath );
+//	Options::Get()->GetOptionAsString( "ConfigPath", &userPath );
+//#endif
 
 	string filename =  userPath + _name;
 

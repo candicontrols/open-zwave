@@ -13,11 +13,11 @@
       <Item label="Rotating Wheel" value="2"/>
     </Value>
 
-    <Value type="byte" index="3" genre="config" label="IR Listen period" units="" min="0" max="127" value="0">
+    <Value type="byte" index="3" genre="config" label="IR Listen period" units="" min="0" max="127" value="0" >
       <Help>Additional time for feedback measurement.Should always be 0.</Help>
     </Value>
 
-    <Value type="byte" index="4" genre="config" label="IR Pulse Width" units="" min="0" max="127" value="50">
+    <Value type="byte" index="4" genre="config" label="IR Pulse Width" units="" min="0" max="127" value="50" >
       <Help>Adjusts transmit signal so received signal will in average be equal to this values. Auto calibration might select another value than this.</Help>
     </Value>
 

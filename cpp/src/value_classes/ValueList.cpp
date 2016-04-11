@@ -106,11 +106,13 @@ void ValueList::ReadXML
 		else
 		{
 			Log::Write( LogLevel_Info, "Value size is invalid. Only 1, 2 & 4 supported for node %d, class 0x%02x, instance %d, index %d", _nodeId, _commandClassId, GetID().GetInstance(), GetID().GetIndex() );
+      m_size = 4;
 		}
 	}
 	else
 	{
 		Log::Write( LogLevel_Info, "Value list size is not set, assuming 4 bytes for node %d, class 0x%02x, instance %d, index %d", _nodeId, _commandClassId, GetID().GetInstance(), GetID().GetIndex() );
+    m_size = 4;
 	}
 
 	// Read the items
@@ -292,7 +294,7 @@ void ValueList::OnValueRefreshed
 // <ValueList::GetItemIdxByLabel>
 // Get the index of an item from its label
 //-----------------------------------------------------------------------------
-int32 const ValueList::GetItemIdxByLabel
+int32 ValueList::GetItemIdxByLabel
 (
 	string const& _label
 )
@@ -312,7 +314,7 @@ int32 const ValueList::GetItemIdxByLabel
 // <ValueList::GetItemIdxByValue>
 // Get the index of an item from its value
 //-----------------------------------------------------------------------------
-int32 const ValueList::GetItemIdxByValue
+int32 ValueList::GetItemIdxByValue
 (
 	int32 const _value
 )

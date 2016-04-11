@@ -45,7 +45,7 @@ void TiXmlString::reserve (size_type cap)
 	{
 		TiXmlString tmp;
 		tmp.init(length(), cap);
-		memcpy(tmp.start(), data(), length());
+		memcpy_s(tmp.start(), length(), data(), length());
 		swap(tmp);
 	}
 }
@@ -58,7 +58,7 @@ TiXmlString& TiXmlString::assign(const char* str, size_type len)
 	{
 		TiXmlString tmp;
 		tmp.init(len);
-		memcpy(tmp.start(), str, len);
+		memcpy_s(tmp.start(), len, str, len);
 		swap(tmp);
 	}
 	else

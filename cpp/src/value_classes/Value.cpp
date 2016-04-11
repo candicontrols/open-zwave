@@ -112,6 +112,9 @@ Value::Value
 	m_max( 0 ),
 	m_refreshTime(0),
 	m_verifyChanges( false ),
+	m_label(""),
+  m_units(""),
+  m_help(""),
 	m_readOnly( false ),
 	m_writeOnly( false ),
 	m_isSet( false ),
@@ -355,7 +358,7 @@ bool Value::Set
 		return false;
 	}
 
-	// retrieve the driver, node and commandclass object for this value
+		 // retrieve the driver, node and commandclass object for this value
 	bool res = false;
 	Node* node = NULL;
 	if( Driver* driver = Manager::Get()->GetDriver( m_id.GetHomeId() ) )

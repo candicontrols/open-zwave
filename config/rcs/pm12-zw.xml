@@ -2,6 +2,31 @@
 <Product xmlns='http://code.google.com/p/open-zwave/'>
   <!-- COMMAND_CLASS_NODE_NAMING.  This class is in the list reported by the PM12, but it does not respond to requests -->
   <CommandClass id="119" action="remove" /> 
+  
+  <!-- COMMAND_CLASS_METER.  This device doesn't always report all its cababilities -->
+  <CommandClass id="50" name="COMMAND_CLASS_METER" version="3" request_flags="2" create_vars="true">
+	<Instance index="1" />
+	<Value type="decimal" genre="user" instance="1" index="0" label="Energy" units="kWh" read_only="true" write_only="false" min="0" max="0" value="0.03" />
+	<Value type="decimal" genre="user" instance="1" index="1" label="Previous Reading" units="kWh" read_only="true" write_only="false" min="0" max="0" value="0.00" />
+	<Value type="int" genre="user" instance="1" index="2" label="Interval" units="seconds" read_only="true" write_only="false" min="-2147483648" max="2147483647" value="65535" />
+	<Value type="decimal" genre="user" instance="1" index="4" label="Energy" units="kVAh" read_only="true" write_only="false" min="0" max="0" value="0.04" />
+	<Value type="decimal" genre="user" instance="1" index="5" label="Previous Reading" units="kVAh" read_only="true" write_only="false" min="0" max="0" value="0.00" />
+	<Value type="int" genre="user" instance="1" index="6" label="Interval" units="seconds" read_only="true" write_only="false" min="-2147483648" max="2147483647" value="65535" />
+	<Value type="decimal" genre="user" instance="1" index="8" label="Power" units="W" read_only="true" write_only="false" min="0" max="0" value="12" />
+	<Value type="decimal" genre="user" instance="1" index="16" label="Voltage" units="V" read_only="true" write_only="false" min="0" max="0" value="119.32" />
+	<Value type="decimal" genre="user" instance="1" index="20" label="Current" units="A" read_only="true" write_only="false" min="0" max="0" value="0.26" />
+	<Value type="decimal" genre="user" instance="1" index="24" label="Power Factor" units="Power Factor" read_only="true" write_only="false" min="0" max="0" value="1" />
+	<Value type="bool" genre="user" instance="1" index="32" label="Exporting" units="" read_only="true" write_only="false" min="0" max="0" value="False" />
+	<Value type="trigger" genre="system" instance="1" index="33" label="Reset" units="" read_only="false" write_only="true" min="0" max="0" />
+  </CommandClass>
 
+  <!-- Configuration Parameters -->
+  <CommandClass id="112">
+    <Value type="short" index="1" genre="config" label="Energy Autosend" units="seconds" min="0" max="32768" value="30">
+      <Help>
+	Instant Energy Autosend Interval (seconds)
+      </Help>
+    </Value>
+	</CommandClass>
 </Product>
 

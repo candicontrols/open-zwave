@@ -3,9 +3,13 @@
 	<Manufacturer id="0040" name="2B Electronics">
 	</Manufacturer>
 	<Manufacturer id="0098" name="2GIG Technologies">
+    <Product type="0001" id="001e" name="CT30 Thermostat" config="2gig/ct30.xml"/>  
+    <Product type="1e10" id="0158" name="CT30 Thermostat" config="2gig/ct30.xml"/>  
 		<Product type="1e12" id="015c" name="CT30 Thermostat" config="2gig/ct30.xml"/>
-		<Product type="1e12" id="015e" name="CT30 Thermostat" config="2gig/ct30.xml"/>
-		<Product type="6401" id="0105" name="CT100 Thermostat" config="2gig/ct100.xml"/>
+    <Product type="1e12" id="015e" name="CT30 Thermostat" config="2gig/ct30.xml"/>
+    <Product type="6401" id="0103" name="CT100 Thermostat" config="2gig/ct100.xml"/>
+    <Product type="6401" id="0105" name="CT100 Thermostat" config="2gig/ct100.xml"/>
+    <Product type="6501" id="000b" name="CT100 Thermostat" config="2gig/ct100.xml"/>
 		<Product type="6401" id="0107" name="CT100 Thermostat USA" config="2gig/ct100.xml"/>
 		<Product type="6501" id="000c" name="CT101 Thermostat (Iris)" config="2gig/ct101.xml"/>
 	</Manufacturer>
@@ -19,12 +23,14 @@
 		<Product type="4952" id="3330" name="ZIR010 PIR Motion Sensor" config="act/zir010.xml"/>
 		<Product type="4952" id="3130" name="ZIR010 PIR Motion Sensor" config="act/zir010.xml"/>
 		<Product type="4450" id="3030" name="ZDP100 Plugin Lamp Module"/>
+                <Product type="4452" id="5064" name="Unknown ACT module"/>
 		<Product type="4457" id="3033" name="ZDW103 Wall Dimmer Module" config="act/zdw103.xml"/>
 		<Product type="4457" id="3330" name="ZDW230 Wall Dimmer Module"/>
 		<Product type="4457" id="3332" name="ZDW232 Wall Dimmer Module" config="act/zdw232.xml"/>
 		<Product type="444d" id="3330" name="ZDM230 Wall Dimmer Module" config="act/zdm230.xml"/>
 		<Product type="5250" id="3030" name="ZRP100 Plugin Appliance Module"/>
 		<Product type="5250" id="3130" name="ZRP110 Exterior Appliance Module" config="act/zrp110.xml"/>
+		<Product type="5252" id="3530" name="Unknown ACT Module"/>
 		<Product type="5257" id="3330" name="ZRW230 Wall Appliance Module"/>
 		<Product type="5246" id="3133" name="LFM-20 Relay Fixture Module" config="act/lfm20.xml"/>
 		<Product type="5257" id="3033" name="ZRW103 Wall Switch Module" config="act/zrw103.xml"/>
@@ -59,6 +65,8 @@
 		<Product type="0003" id="0011" name="Micro Double Switch" />
 		<Product type="0002" id="0036" name="Recessed Door Sensor" config="aeon_labs/recessed_doorsensor.xml"/>
 		<Product type="0004" id="0025" name="Z-Wave Repeater"/>
+		<Product type="0101" id="005a" name="Z-Stick Gen5"/>
+		<Product type="0102" id="0064" name="Aeotec Multisensor"/>
 	</Manufacturer>
         <Manufacturer id="0111" name="Airline Mechanical">
                 <Product type="8200" id="0200" name="ZDS-100"/>
@@ -148,6 +156,7 @@
 		<Product type="0001" id="0001" name="Switchkeeper Plug-in Appliance Module"/>
 	</Manufacturer>
         <Manufacturer id="014a" name="Ecolink">
+	        <Product type="0001" id="0001" name="Home Motion Sensor"/>
                 <Product type="0001" id="0003" name="Garage Door Sensor"/>
         </Manufacturer>
 	<Manufacturer id="0087" name="Eka Systems">
@@ -183,7 +192,7 @@
 		<Product type="0001" id="0002" name="SP814 Motion Detector" config="everspring/sp814.xml"/>
 		<Product type="0006" id="0001" name="ST814 Temperature and Humidity Sensor" config="everspring/st814.xml"/>
 		<Product type="0007" id="0001" name="ST815 Illumination Sensor" config="everspring/st815.xml"/>
-		<Product type="000b" id="0001" name="ST812 Flood Detector"/>
+		<Product type="000b" id="0001" name="ST812 Flood Detector" />
 		<Product type="0009" id="0001" name="TSE03 Door Bell" config="everspring/tse03.xml"/>
 	</Manufacturer>
 	<Manufacturer id="0116" name="Chromagic Technologies Corporation">
@@ -198,9 +207,10 @@
                 <Product type="0001" id="0001" name="SS201-US-W Z-Wave Controller"/>
 	</Manufacturer>
 	<Manufacturer id="0113" name="Evolve Guest Controls">
+		<Product type="4556" id="5434" name="T100R Thermostat" config="evolve/t100r.xml"/>
 		<Product type="4457" id="3034" name="LRM-AS Wall Dimmer 500W" config="evolve/lrm-as.xml"/>
-                <Product type="5246" id="3133" name="LFM-20 Fixture Module"/>
-                <Product type="5257" id="3533" name="LSM-15 Wall Switch" config="evolve/lsm-15.xml"/>
+    <Product type="5246" id="3133" name="LFM-20 Fixture Module"/>
+    <Product type="5257" id="3533" name="LSM-15 Wall Switch" config="evolve/lsm-15.xml"/>
 		<Product type="5457" id="3033" name="LTM-5 Wall Switch Transmitter" config="evolve/ltm-5.xml" />
 	</Manufacturer>
 	<Manufacturer id="0036" name="Exceptional Innv">
@@ -306,7 +316,7 @@
 		<Product type="0001" id="0001" name="ASR-RF Thermostat Receiver"/>
 		<Product type="0001" id="0002" name="AS2-RF Thermostat Transmitter"/>
 		<Product type="0001" id="0003" name="HRT4-ZW Thermostat Transmitter" config="horstmann/hrt4zw.xml"/>
-		<Product type="0003" id="0001" name="ASR-ZW Thermostat Receiver"/>
+		<Product type="0003" id="0001" name="ASR-ZW Thermostat Receiver" config="horstmann/asrzw.xml"/>
 		<Product type="0004" id="0001" name="SCSC17 Thermostat"/>
 		<Product type="000f" id="0001" name="SWM01 Water Meter Sensor"/>
 	</Manufacturer>
@@ -378,13 +388,16 @@
 		<Product type="1102" id="0243" name="VRCS2-MRZ 2-Button Scene Controller with Switches"/>
 	</Manufacturer>
 	<Manufacturer id="014f" name="Linear">
+		<Product type="2001" id="0102" name="WADAWZ Door/Window Sensor"/>
                 <Product type="4450" id="3030" name="PD300Z-2 Plug-in Dimmer Module"/>
                 <Product type="4457" id="3034" name="WD500Z-1 Wall Dimmer Switch"/>
                 <Product type="4457" id="3331" name="WD1000Z-1 Wall Dimmer Switch"/>
+                <Product type="4754" id="3038" name="LB60Z-1 Dimmable LED Light Bulb"/>
                 <Product type="5246" id="3133" name="FS20Z Isolated Contact Fixture Module"/>
                 <Product type="5250" id="3030" name="PS15Z-2 Plug-in Appliance Module"/>
                 <Product type="5252" id="3530" name="WO15Z-1 Single Wall Outlet"/>
                 <Product type="5257" id="3533" name="WS15Z-1"/>
+                <Product type="5442" id="5431" name="GC-TBZ48 Thermostat" config="linear/gctbz48.xml" />
                 <Product type="5457" id="3033" name="WT00Z-1 3-Way wall Accessory Switch"/>
         </Manufacturer>
 	<Manufacturer id="015e" name="Locstar">
@@ -501,17 +514,24 @@
 	  <Product type="0001" id="0005" name="TZ43-IHD SMUD Thermostat" config="rcs/therm0005.xml" />
 	  <Product type="0001" id="0007" name="TZ45-IHD SMUD Thermostat" config="rcs/therm0007.xml" />
 	  <Product type="0001" id="0009" name="TZ45 Thermostat" config="rcs/therm0009.xml" />
-	  <Product type="0001" id="000a" name="TZ4Z-IHD RCS Thermostat" />
+	  <Product type="0001" id="000a" name="TZ45-IHD RCS Thermostat" config="rcs/therm000a.xml" />
 	  <Product type="454d" id="3532" name="EM52-ZW Z-Wave Home Energy Meter" config="rcs/em52-zw.xml" />
 	  <Product type="504d" id="3132" name="PM12-ZW Z-Wave Power Monitoring Module" config="rcs/pm12-zw.xml" />
+	  <Product type="504d" id="3133" name="PMC13-ZW Z-Wave Power Monitoring and Control Module" config="rcs/pmc13-zw.xml" />
+	  <Product type="504d" id="3330" name="PMC30-ZW 30A Power Monitor and Control" config="rcs/pmc30-zw.xml" />
+	  <Product type="504d" id="3430" name="PMC40-ZW 40A Power Monitor and Control" config="rcs/pmc40-zw.xml" />
 	</Manufacturer>
 	<Manufacturer id="0065" name="RS Scene">
 	</Manufacturer>
 	<Manufacturer id="0030" name="HomeSeer Tech">
 	</Manufacturer>
 	<Manufacturer id="003b" name="Schlage">
-		<Product type="634b" id="504c" name="FE599GR Wireless Door Lock"/>
+	  <Product type="634b" id="504c" name="FE599GR Wireless Door Lock" config="schlage/fe599gr.xml" />
 	</Manufacturer>
+  <Manufacturer id="011f" name="Schlage">
+    <Product type="0001" id="0001" name="Motion Sensor" />
+    <Product type="0001" id="0002" name="RS100HC Door/Window Sensor" />
+  </Manufacturer>
 	<Manufacturer id="0097" name="Schlage Link">
 		<Product type="1182" id="4501" name="iTemp Dual Sensor" config="schlagelink/itemp.xml" />
 		<Product type="1188" id="4501" name="iTemp Dual Sensor" config="schlagelink/itemp.xml" />
@@ -545,9 +565,12 @@
 		<Product type="0001" id="0001" name="ThereGate"/>
 	</Manufacturer>
 	<Manufacturer id="008b" name="Trane">
-		<Product type="5452" id="5431" name="Model TZEMT400AB32MAA" config="trane/TZEMT400AB32MAA.xml"/>
-		<Product type="5452" id="5433" name="Model TZEMT400BB32MAA" config="trane/TZEMT400BB32MAA.xml"/>
-		<Product type="5452" id="5436" name="Model TZEMT400BB32MAA" config="trane/TZEMT400BB32MAA.xml"/>
+		<Product type="5452" id="5431" name="TZEMT400AB32MAA Thermostat" config="trane/TZEMT400AB32MAA.xml"/>
+		<Product type="5452" id="5433" name="TZEMT400BB32MAA Thermostat" config="trane/TZEMT400BB32MAA.xml"/>
+		<Product type="5452" id="5436" name="TZEMT400BB32MAA Thermostat" config="trane/TZEMT400BB32MAA.xml"/>
+		<Product type="5452" id="5434" name="TZEMT500BB32MAA Thermostat and Humidity" config="trane/TZEMT500BB32MAA.xml"/>
+		<Product type="5452" id="5439" name="TCONT624AS42DA Thermostat" config="trane/TCONT624AS42DA.xml"/>
+                <Product type="5452" id="5442" name="XR524 Thermostat" config="trane/XR524.xml"/>
 	</Manufacturer>
 	<Manufacturer id="006b" name="Tricklestar">
 	</Manufacturer>
@@ -600,7 +623,7 @@
 	<Manufacturer id="004e" name="Zdata">
 	</Manufacturer>
 	<Manufacturer id="0000" name="Zensys">
-		<Product type="0001" id="0001" name="Controller"/>
+	  <Product type="0001" id="0001" name="Controller"/>
 	</Manufacturer>
 	<Manufacturer id="0109" name="Vision">
 		<Product type="1001" id="0101" name="ZU1401 Z-Wave USB Stick"/>

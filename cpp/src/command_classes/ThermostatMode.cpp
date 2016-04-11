@@ -217,7 +217,7 @@ bool ThermostatMode::RequestValue
 			msg->SetInstance( this, _instance );
 			msg->Append( GetNodeId() );
 			msg->Append( 2 );
-			msg->Append( GetCommandClassId() );
+			msg->AppendDuplicateClassId( GetCommandClassId() );
 			msg->Append( ThermostatModeCmd_Get );
 			msg->Append( GetDriver()->GetTransmitOptions() );
 			GetDriver()->SendMsg( msg, _queue );
@@ -329,11 +329,11 @@ bool ThermostatMode::SetValue
 	{
 		ValueList const* value = static_cast<ValueList const*>(&_value);
 		uint8 state = (uint8)value->GetItem().m_value;
-
+		
 		Msg* msg = new Msg( "ThermostatModeCmd_Set", GetNodeId(), REQUEST, FUNC_ID_ZW_SEND_DATA, true );
 		msg->Append( GetNodeId() );
 		msg->Append( 3 );
-		msg->Append( GetCommandClassId() );
+		msg->AppendDuplicateClassId( GetCommandClassId() );
 		msg->Append( ThermostatModeCmd_Set );
 		msg->Append( state );
 		msg->Append( GetDriver()->GetTransmitOptions() );

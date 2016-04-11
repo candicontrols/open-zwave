@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Product xmlns='http://code.google.com/p/open-zwave/'>
+	<!-- This thermostat's setpoint descriptions are 1 based, not 0 -->
+	<CommandClass id="67" name="COMMAND_CLASS_THERMOSTAT_SETPOINT" base="0" />
+
+        <CommandClass id="68" name="COMMAND_CLASS_THERMOSTAT_FAN_MODE" version="1" request_flags="4" create_vars="true">
+          <Value type="list" genre="user" instance="1" index="0" label="Fan Mode" units="" read_only="false" write_only="false" min="0" max="0" value="0">
+            <Item label="Auto Low" value="0" />
+            <Item label="On Low" value="1" />
+          </Value>
+          <SupportedModes>
+            <Mode index="0" label="Auto Low" />
+            <Mode index="1" label="On Low" />
+          </SupportedModes>
+        </CommandClass>
+
+	<CommandClass id="112">
+	  <Value type="list" index="7" genre="config" label="F/C Units" units="" value="0" min="0" max="1" size="1">
+	    <Item label="C" value="0" />
+	    <Item label="F" value="1" />
+	  </Value>
+
+	  <Value type="list" index="24" genre="config" label="Display Lock" units="" min="0" max="1" value="0" size="1">
+	    <Item label="Unlocked" value="0" />
+	    <Item label="Locked" value="1" />
+	  </Value>
+
+	  <Value type="list" index="39" genre="config" label="Run/Hold Mode" units="" min="0" max="1" value="0" size="1">
+	    <Item label="Hold" value="0" />
+	    <Item label="Run" value="1" />
+	  </Value>
+
+	  <Value type="list" index="40" genre="config" label="Setback Mode" units="" min="0" max="1" value="0" size="1">
+	    <Item label="No Setback" value="0" />
+	    <Item label="Unoccupied" value="1" />
+	 </Value>
+	</CommandClass>
+
+
+</Product>
+

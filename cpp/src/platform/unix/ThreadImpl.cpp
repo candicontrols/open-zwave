@@ -31,6 +31,8 @@
 #include "platform/Thread.h"
 #include "ThreadImpl.h"
 
+#include <unistd.h>
+
 #ifdef DARWIN
 #define pthread_yield pthread_yield_np
 #endif
@@ -61,6 +63,7 @@ ThreadImpl::~ThreadImpl
 (
 )
 {
+   pthread_detach(m_hThread);
 }
 
 //-----------------------------------------------------------------------------
@@ -77,7 +80,7 @@ bool ThreadImpl::Start
 	pthread_attr_t ta;
 
 	pthread_attr_init( &ta );
-	pthread_attr_setstacksize ( &ta, 0 );
+	pthread_attr_setstacksize ( &ta, 4096 * 1024 );
 	pthread_attr_setdetachstate ( &ta, PTHREAD_CREATE_JOINABLE );
 
 	// Create a thread to run the specified function

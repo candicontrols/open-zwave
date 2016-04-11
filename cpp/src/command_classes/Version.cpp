@@ -256,7 +256,7 @@ void Version::CreateVars
 {
 	if( Node* node = GetNodeUnsafe() )
 	{
-	  	node->CreateValueString( ValueID::ValueGenre_System, GetCommandClassId(), _instance, VersionIndex_Library, "Library Version", "", true, false, "Unknown", 0 );
+		node->CreateValueString( ValueID::ValueGenre_System, GetCommandClassId(), _instance, VersionIndex_Library, "Library Version", "", true, false, "Unknown", 0 );
 		node->CreateValueString( ValueID::ValueGenre_System, GetCommandClassId(), _instance, VersionIndex_Protocol, "Protocol Version", "", true, false, "Unknown", 0 );
 		node->CreateValueString( ValueID::ValueGenre_System, GetCommandClassId(), _instance, VersionIndex_Application, "Application Version", "", true, false, "Unknown", 0 );
 	}

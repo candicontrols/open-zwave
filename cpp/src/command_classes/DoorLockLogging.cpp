@@ -308,7 +308,8 @@ bool DoorLockLogging::HandleMsg
 			if (usercodelength > 0)
 				for (int i = 0; i < usercodelength; i++ )
 				{
-					snprintf(usercode, sizeof(usercode), "%s %d", usercode, (int)_data[12+i]);
+          size_t len = strlen(usercode);
+          snprintf(usercode + len, sizeof(usercode) - len, " %d", (int)_data[12+i]);
 				}
 
 			if (valid) {

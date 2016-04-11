@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Product xmlns='http://code.google.com/p/open-zwave/'>
+
+	<!-- COMMAND_CLASS_ASSOCIATION.  This class is in the list reported by the thermostat, but it does not respond to requests -->  
+	<CommandClass id="133" name="COMMAND_CLASS_ASSOCIATION" version="1" request_flags="4" create_vars="true">
+		<Instance index="1" />
+		<Associations num_groups="1">
+		  <Group index="1" max_associations="5" label="Group 1" auto="true">
+		    <Node id="1" />
+		  </Group>
+		</Associations>
+	</CommandClass>
+
+
+  <CommandClass id="49" name="COMMAND_CLASS_SENSOR_MULTILEVEL" version="1" request_flags="4" create_vars="true">
+    <Instance index="1" />
+    <Value type="decimal" genre="user" instance="1" index="1" label="Temperature" units="F" read_only="true" write_only="false" verify_changes="false" poll_intensity="0" min="0" max="0" value="75" />
+  </CommandClass>
+
+  <CommandClass id="66" name="COMMAND_CLASS_THERMOSTAT_OPERATING_STATE">
+    <Instance index="1" />
+    <Value type="list" genre="user" instance="1" index="0" label="Operating State" units="" read_only="false" write_only="false" min="0" max="0" value="0">
+      <Item label="Idle" value="0" />
+      <Item label="Heating" value="1" />
+      <Item label="Cooling" value="2" />
+    </Value>
+    <SupportedModes>
+      <Mode index="0" label="Idle" />
+      <Mode index="1" label="Heating" />
+      <Mode index="2" label="Cooling" />
+    </SupportedModes>
+ </CommandClass>
+
+  
+	<!-- The thermostat does not properly report its operating modes -->
+	<CommandClass id="64" name="COMMAND_CLASS_THERMOSTAT_MODE" version="1" request_flags="4" create_vars="true">
+		<Value type="list" genre="user" instance="1" index="0" label="Mode" units="" read_only="false" write_only="false" min="0" max="0" value="0">
+		  <Item label="Off" value="0" />
+		  <Item label="Heat" value="1" />
+		  <Item label="Cool" value="2" />
+		  <Item label="Auto" value="3" />
+		  <Item label="Aux Heat" value="4" />
+		</Value>
+		<SupportedModes>
+		  <Mode index="0" label="Off" />
+		  <Mode index="1" label="Heat" />
+		  <Mode index="2" label="Cool" />
+		  <Mode index="3" label="Auto" />
+		  <Mode index="4" label="Aux Heat" />
+		</SupportedModes>
+	</CommandClass>
+
+	<CommandClass id="67" name="COMMAND_CLASS_THERMOSTAT_SETPOINT" base="0">
+		<Instance index="1" />
+		<Value type="decimal" genre="user" instance="1" index="1" label="Heating 1" units="F" read_only="false" write_only="false" min="0" max="0" value="65" />
+		<Value type="decimal" genre="user" instance="1" index="2" label="Cooling 1" units="F" read_only="false" write_only="false" min="0" max="0" value="80" />
+	</CommandClass>
+
+  <CommandClass id="68" name="COMMAND_CLASS_THERMOSTAT_FAN_MODE" version="1" request_flags="4" create_vars="true">
+    <Instance index="1" />
+    <Value type="list" genre="user" instance="1" index="0" label="Fan Mode" units="" read_only="false" write_only="false" verify_changes="false" poll_intensity="0" min="0" max="0" vindex="0" size="1">
+      <Item label="Auto Low" value="0" />
+      <Item label="On Low" value="1" />
+    </Value>
+    <SupportedModes>
+      <Mode index="0" label="Auto Low" />
+      <Mode index="1" label="On Low" />
+    </SupportedModes>
+  </CommandClass>
+
+  
+	<CommandClass id="112">
+	  <Value type="list" index="7" genre="config" label="F/C Units" units="" value="0" min="0" max="1" size="1">
+	    <Item label="C" value="0" />
+	    <Item label="F" value="1" />
+	  </Value>
+
+	  <Value type="list" index="24" genre="config" label="Display Lock" units="" min="0" max="1" value="0" size="1">
+	    <Item label="Unlocked" value="0" />
+	    <Item label="Locked" value="1" />
+	  </Value>
+
+	  <Value type="list" index="39" genre="config" label="Run/Hold Mode" units="" min="0" max="1" value="0" size="1">
+	    <Item label="Run" value="0" />
+	    <Item label="Hold" value="1" />
+	  </Value>
+        </CommandClass>
+ 
+
+
+   <CommandClass id="44" name="COMMAND_SCENE_ACTUATOR_CONF"/>
+   <CommandClass id="43" name="COMMAND_SCENE_ACTIVATION"/>
+   <CommandClass id="129" name="COMMAND_CLASS_CLOCK"/>
+   
+</Product>
+

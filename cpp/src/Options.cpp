@@ -25,8 +25,8 @@
 //
 //-----------------------------------------------------------------------------
 
-#include <algorithm>
-#include <string>
+#include <algorithm> 
+#include <string>  
 
 #include "Defs.h"
 #include "Options.h"
@@ -45,7 +45,7 @@ Options* Options::s_instance = NULL;
 // Static method to create an Options object
 //-----------------------------------------------------------------------------
 Options* Options::Create
-(
+( 
 	string const& _configPath,
 	string const& _userPath,
 	string const& _commandLine
@@ -54,8 +54,8 @@ Options* Options::Create
 
 	if( s_instance == NULL )
 	{
-		string configPath = _configPath;
-		string userPath = _userPath;
+     string configPath = _configPath;
+     string userPath = _userPath;
 
 		// Make sure a trailing path delimiter is present
 		if( configPath.size() > 0 && configPath[configPath.size() - 1] != '/' )
@@ -162,6 +162,7 @@ Options::Options
 	string const& _userPath,
 	string const& _commandLine
 ):
+	//m_xml( _configPath + "options.xml" ),
 	m_xml ("options.xml"),
 	m_commandLine( _commandLine ),
 	m_SystemPath (_configPath),
@@ -192,7 +193,7 @@ Options::~Options
 // Add a boolean option.
 //-----------------------------------------------------------------------------
 bool Options::AddOptionBool
-(
+( 
 	string const& _name,
 	bool const _value
 )
@@ -201,7 +202,7 @@ bool Options::AddOptionBool
 	Option* option = AddOption( _name );
 
 	if (option == NULL) return false;
-
+	
 	// set unique option members
 	option->m_type = Options::OptionType_Bool;
 	option->m_valueBool = _value;
@@ -242,7 +243,7 @@ bool Options::AddOptionInt
 // Add a string option.
 //-----------------------------------------------------------------------------
 bool Options::AddOptionString
-(
+( 
 	string const& _name,
 	string const& _value,
 	bool const _append
@@ -252,7 +253,7 @@ bool Options::AddOptionString
 	Option* option = AddOption( _name );
 
 	if (option == NULL) return false;
-
+	
 	// set unique option members
 	option->m_type = Options::OptionType_String;
 	option->m_valueString = _value;
@@ -269,9 +270,9 @@ bool Options::AddOptionString
 // Get the value of a boolean option.
 //-----------------------------------------------------------------------------
 bool Options::GetOptionAsBool
-(
-	string const& _name,
-	bool* o_value
+( 
+	string const& _name, 
+	bool* o_value 
 )
 {
 	Option* option = Find( _name );
@@ -290,9 +291,9 @@ bool Options::GetOptionAsBool
 // Get the value of an integer option.
 //-----------------------------------------------------------------------------
 bool Options::GetOptionAsInt
-(
-	string const& _name,
-	int32* o_value
+( 
+	string const& _name, 
+	int32* o_value 
 )
 {
 	Option* option = Find( _name );
@@ -311,9 +312,9 @@ bool Options::GetOptionAsInt
 // Get the value of a string option.
 //-----------------------------------------------------------------------------
 bool Options::GetOptionAsString
-(
-	string const& _name,
-	string* o_value
+( 
+	string const& _name, 
+	string* o_value 
 )
 {
 	Option* option = Find( _name );
@@ -332,7 +333,7 @@ bool Options::GetOptionAsString
 // Get the type of value stored in an option.
 //-----------------------------------------------------------------------------
 Options::OptionType Options::GetOptionType
-(
+( 
 	string const& _name
 )
 {
@@ -497,7 +498,7 @@ bool Options::ParseOptionsXML
 				{
 					char const* value = optionElement->Attribute( "value" );
 					if( value )
-					{
+					{	
 						// Set the value
 						option->SetValueFromString( value );
 					}
@@ -516,7 +517,7 @@ bool Options::ParseOptionsXML
 // General setup for adding a specific option
 //-----------------------------------------------------------------------------
 Options::Option* Options::AddOption
-(
+( 
 	string const& _name
 )
 {
@@ -592,7 +593,7 @@ bool Options::Option::SetValueFromString
 	{
 		if( m_append && ( m_valueString.size() > 0 ) )
 		{
-			m_valueString += ( string(",") + _value );
+			m_valueString += ( string(",") + _value );	
 		}
 		else
 		{

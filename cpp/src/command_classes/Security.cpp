@@ -38,6 +38,7 @@
 
 #include "value_classes/ValueBool.h"
 
+#include "candi_s.h"
 
 using namespace OpenZWave;
 
@@ -269,10 +270,13 @@ bool Security::Init
 (
 )
 {
+  Node* node = GetNodeUnsafe();   
+  
 	/* if we are adding this node, then instead to a SchemeGet Command instead - This
 	 * will start the Network Key Exchange
 	 */
-	if (GetNodeUnsafe()->IsAddingNode()) {
+	if (node) {
+    node->SetSecurityState(Node::SecurityState_Negotiating);
 		Msg * msg = new Msg ("SecurityCmd_SchemeGet", GetNodeId(), REQUEST, FUNC_ID_ZW_SEND_DATA, true, true, FUNC_ID_APPLICATION_COMMAND_HANDLER, GetCommandClassId() );
 		msg->Append( GetNodeId() );
 		msg->Append( 3 );
@@ -349,6 +353,21 @@ bool Security::HandleSupportedReport
 	return true;
 }
 
+void Security::AdvanceSecurity(void) {
+  if (!m_schemeagreed) {
+    uint8 message[3] = {  SecurityCmd_SchemeReport, SecurityScheme_Zero, 0 };
+  
+    //HandleSupportedReport();
+    Log::Write(LogLevel_Info, GetNodeId(), " *** Advancing Security after stall ***");
+    HandleMsg(message, 3, 1);
+  } else if (!m_networkkeyset) {
+    // This is going to be a key failure
+    GetNodeUnsafe()->QueryStageComplete(Node::QueryStage_SecurityReport);
+    GetNodeUnsafe()->AdvanceQueries(); 
+    GetNodeUnsafe()->SetSecurityState(Node::SecurityState_Failed);
+  }
+}
+
 //-----------------------------------------------------------------------------
 // <Security::HandleMsg>
 // Handle a message from the Z-Wave network
@@ -370,7 +389,7 @@ bool Security::HandleMsg
 			 * class will route the unecrypted messages to our SendMsg) and for New Command
 			 * Classes, create them, and of course, also do a SetSecured on them.
 			 *
-			 * This means we must do a SecurityCmd_SupportedGet request ASAP so we dont have
+			 * This means we must do a SecurityCmd_SupportedGet request ASAP so we don't have
 			 * Command Classes created after the Discovery Phase is completed!
 			 */
 			Log::Write(LogLevel_Info, GetNodeId(), "Received SecurityCmd_SupportedReport from node %d", GetNodeId() );
@@ -456,7 +475,7 @@ bool Security::HandleMsg
 		}
 		case SecurityCmd_NonceReport:
 		{
-			/* we recieved a NONCE from a device, so assume that there is something in a queue to send
+			/* we received a NONCE from a device, so assume that there is something in a queue to send
 			 * out
 			 */
 			Log::Write(LogLevel_Info,  GetNodeId(), "Received SecurityCmd_NonceReport from node %d", GetNodeId() );
@@ -466,7 +485,7 @@ bool Security::HandleMsg
 		}
 		case SecurityCmd_MessageEncap:
 		{
-			/* We recieved a Encrypted single packet from the Device. Decrypt it.
+			/* We received a Encrypted single packet from the Device. Decrypt it.
 			 *
 			 */
 			Log::Write(LogLevel_Info,  GetNodeId(), "Received SecurityCmd_MessageEncap from node %d", GetNodeId() );
@@ -475,7 +494,7 @@ bool Security::HandleMsg
 		}
 		case SecurityCmd_MessageEncapNonceGet:
 		{
-			/* we recieved a encrypted packet from the device, and the device is also asking us to send a
+			/* we received a encrypted packet from the device, and the device is also asking us to send a
 			 * new NONCE to it, hence there must be multiple packets.
 			 */
 			Log::Write(LogLevel_Info,  GetNodeId(), "Received SecurityCmd_MessageEncapNonceGet from node %d", GetNodeId() );
@@ -508,7 +527,7 @@ void Security::SendMsg
 	if( _msg->GetLength() < 7 )
 	{
 		// Message too short
-		Log::Write(LogLevel_Error, GetNodeId(), "Message to to Short for Encryption");
+		Log::Write(LogLevel_Error, GetNodeId(), "Message too Short for Encryption");
 		return;
 	}
 
@@ -526,14 +545,14 @@ void Security::SendMsg
 		SecurityPayload *payload1 = new SecurityPayload();
 		payload1->m_length = 28;
 		payload1->m_part = 1;
-		memcpy( payload1->m_data, &buffer[6], payload1->m_length );
+		memcpy_s( payload1->m_data, payload1->m_length, &buffer[6], payload1->m_length );
 		payload1->logmsg = _msg->GetLogText();
 		QueuePayload( payload1 );
 
 		SecurityPayload *payload2 = new SecurityPayload();
 		payload2->m_length = length-28;
 		payload2->m_part = 2;
-		memcpy( payload2->m_data, &buffer[34], payload2->m_length );
+		memcpy_s( payload2->m_data, payload2->m_length, &buffer[34], payload2->m_length );
 		payload2->logmsg = _msg->GetLogText();
 		QueuePayload( payload2 );
 	}
@@ -543,7 +562,7 @@ void Security::SendMsg
 		SecurityPayload *payload = new SecurityPayload();
 		payload->m_length = length;
 		payload->m_part = 0;				// Zero means not split into separate messages
-		memcpy( payload->m_data, &buffer[6], payload->m_length );
+		memcpy_s( payload->m_data, payload->m_length, &buffer[6], payload->m_length );
 		payload->logmsg = _msg->GetLogText();
 		QueuePayload( payload );
 	}
@@ -705,6 +724,11 @@ bool Security::EncryptMessage
 	if (aes_ofb_encrypt(encryptedpayload, tmpoutput, payload->m_length+1, initializationVector, this->EncryptKey) == EXIT_FAILURE) {
 		Log::Write(LogLevel_Warning, GetNodeId(), "Failed to Encrypt Packet");
 		delete msg;
+    
+    // Assume negotiation failure
+    if (this->m_networkkeyset == false) {
+       GetNodeUnsafe()->SetSecurityState(Node::SecurityState_Failed);
+    }
 		return false;
 	}
 
@@ -751,9 +775,10 @@ bool Security::EncryptMessage
 	 * as the reply we will get back will be encrypted with the new Network key
 	 */
 	if ((this->m_networkkeyset == false) && (payload->m_data[0] == 0x98) && (payload->m_data[1] == 0x06)) {
-		Log::Write(LogLevel_Info, GetNodeId(), "Reseting Network Key after Inclusion");
+		Log::Write(LogLevel_Info, GetNodeId(), "Resetting Network Key after Inclusion");
 		this->m_networkkeyset = true;
 		SetupNetworkKey();
+    GetNodeUnsafe()->SetSecurityState(Node::SecurityState_Secure);
 	}
 
 	delete payload;
@@ -927,7 +952,7 @@ bool Security::GenerateAuthentication
 	buffer[1] = _sendingNode;
 	buffer[2] = _receivingNode;
 	buffer[3] = _length - 19; // Subtract 19 to account for the 9 security command class bytes that come before and after the encrypted data
-	memcpy( &buffer[4], &_data[9], _length-19 );	// Encrypted message
+	memcpy_s( &buffer[4], _length-19, &_data[9], _length-19 );	// Encrypted message
 
 	uint8 bufsize = _length - 19 + 4; /* the size of buffer */
 #ifdef DEBUG
@@ -987,7 +1012,7 @@ bool Security::GenerateAuthentication
 	PrintHex("Computed Auth", tmpauth, 8);
 #endif
 	/* so only copy 8 bytes to the _authentication var */
-	memcpy(_authentication, tmpauth, 8);
+	memcpy_s(_authentication, 8, tmpauth, 8);
 	return true;
 }
 

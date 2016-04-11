@@ -11,6 +11,27 @@
 		</Associations>
 	</CommandClass>
 
+
+  <CommandClass id="49" name="COMMAND_CLASS_SENSOR_MULTILEVEL" version="1" request_flags="4" create_vars="true">
+    <Instance index="1" />
+    <Value type="decimal" genre="user" instance="1" index="1" label="Temperature" units="F" read_only="true" write_only="false" verify_changes="false" poll_intensity="0" min="0" max="0" value="75" />
+  </CommandClass>
+
+  <CommandClass id="66" name="COMMAND_CLASS_THERMOSTAT_OPERATING_STATE">
+    <Instance index="1" />
+    <Value type="list" genre="user" instance="1" index="0" label="Operating State" units="" read_only="false" write_only="false" min="0" max="0" value="0">
+      <Item label="Idle" value="0" />
+      <Item label="Heating" value="1" />
+      <Item label="Cooling" value="2" />
+    </Value>
+    <SupportedModes>
+      <Mode index="0" label="Idle" />
+      <Mode index="1" label="Heating" />
+      <Mode index="2" label="Cooling" />
+    </SupportedModes>
+ </CommandClass>
+
+  
 	<!-- The thermostat does not properly report its operating modes -->
 	<CommandClass id="64" name="COMMAND_CLASS_THERMOSTAT_MODE" version="1" request_flags="4" create_vars="true">
 		<Value type="list" genre="user" instance="1" index="0" label="Mode" units="" read_only="false" write_only="false" min="0" max="0" value="0">
@@ -29,11 +50,75 @@
 		</SupportedModes>
 	</CommandClass>
 
-	<CommandClass id="67" name="COMMAND_CLASS_THERMOSTAT_SETPOINT" version="1" request_flags="4" create_vars="true" base="0">
+	<CommandClass id="67" name="COMMAND_CLASS_THERMOSTAT_SETPOINT" base="0">
 		<Instance index="1" />
-		  <Value type="decimal" genre="user" instance="1" index="1" label="Heating 1" units="F" read_only="false" write_only="false" min="0" max="0" value="65" />
-		  <Value type="decimal" genre="user" instance="1" index="2" label="Cooling 1" units="F" read_only="false" write_only="false" min="0" max="0" value="80" />
+		<Value type="decimal" genre="user" instance="1" index="1" label="Heating 1" units="F" read_only="false" write_only="false" min="0" max="0" value="65" />
+		<Value type="decimal" genre="user" instance="1" index="2" label="Cooling 1" units="F" read_only="false" write_only="false" min="0" max="0" value="80" />
 	</CommandClass>
 
+  <CommandClass id="68" name="COMMAND_CLASS_THERMOSTAT_FAN_MODE" version="1" request_flags="4" create_vars="true">
+    <Instance index="1" />
+    <Value type="list" genre="user" instance="1" index="0" label="Fan Mode" units="" read_only="false" write_only="false" verify_changes="false" poll_intensity="0" min="0" max="0" vindex="0" size="1">
+      <Item label="Auto" value="0" />
+      <Item label="Low" value="1" />
+    </Value>
+    <SupportedModes>
+      <Mode index="0" label="Auto" />
+      <Mode index="1" label="Low" />
+    </SupportedModes>
+  </CommandClass>
+
+  
+  <!-- COMMAND_CLASS_METER.  This device doesn't always report all its cababilities -->
+  <CommandClass id="50" name="COMMAND_CLASS_METER" version="3" request_flags="2" create_vars="true">
+    <Instance index="1" />
+    <Value type="decimal" genre="user" instance="1" index="0" label="Energy" units="kWh" read_only="true" write_only="false" min="0" max="0" value="0.03" />
+    <Value type="decimal" genre="user" instance="1" index="8" label="Power" units="W" read_only="true" write_only="false" min="0" max="0" value="12" />
+  </CommandClass>
+
+	<CommandClass id="112">
+	  <Value type="list" index="7" genre="config" label="F/C Units" units="" value="0" min="0" max="1" size="1">
+	    <Item label="C" value="0" />
+	    <Item label="F" value="1" />
+	  </Value>
+
+	  <Value type="list" index="24" genre="config" label="Display Lock" units="" min="0" max="1" value="0" size="1">
+	    <Item label="Unlocked" value="0" />
+	    <Item label="Locked" value="1" />
+	  </Value>
+
+	  <Value type="list" index="39" genre="config" label="Run/Hold Mode" units="" min="0" max="1" value="0" size="1">
+	    <Item label="Run" value="0" />
+	    <Item label="Hold" value="1" />
+	  </Value>
+ 
+	  <Value type="list" index="40" genre="config" label="Setback Mode" units="" min="0" max="1" value="0" size="1">
+	    <Item label="No Setback" value="0" />
+	    <Item label="Unoccupied" value="2" />
+	  </Value>
+ 
+    <Value type="byte" index="77" genre="config" label="Setback" units="" min="0" max="1" value="0" size="1"/>
+
+    <Value type="list" index="83" genre="config" label="ATC" units="" min="0" max="10" value="0" size="1">
+      <Item label="No" value="0" />
+      <Item label="Yes" value="1" />
+    </Value>
+        
+    <Value type="list" genre="config" instance="1" index="85" label="ADR Mode" units="" read_only="false" write_only="false" verify_changes="false" poll_intensity="0" min="0" max="1" vindex="0" size="1">
+      <Item label="None"   value="230" />
+      <Item label="Far"    value="231" />
+      <Item label="Near"   value="232" />
+      <Item label="Active" value="233" />
+      <Item label="Active Normal" value="234" />
+      <Item label="Active Mod"    value="235" />
+      <Item label="Active High"   value="236" />
+    </Value>
+    
+   </CommandClass>
+
+   <CommandClass id="44" name="COMMAND_SCENE_ACTUATOR_CONF"/>
+   <CommandClass id="43" name="COMMAND_SCENE_ACTIVATION"/>
+   <CommandClass id="129" name="COMMAND_CLASS_CLOCK"/>
+   
 </Product>
 

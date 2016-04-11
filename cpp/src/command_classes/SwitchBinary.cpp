@@ -137,7 +137,7 @@ bool SwitchBinary::SetValue
 		msg->SetInstance( this, _value.GetID().GetInstance() );
 		msg->Append( GetNodeId() );
 		msg->Append( 3 );
-		msg->Append( GetCommandClassId() );
+		msg->AppendDuplicateClassId( GetCommandClassId() );
 		msg->Append( SwitchBinaryCmd_Set );
 		msg->Append( value->GetValue() ? 0xff : 0x00 );
 		msg->Append( GetDriver()->GetTransmitOptions() );

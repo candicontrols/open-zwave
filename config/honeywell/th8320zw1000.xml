@@ -2,4 +2,44 @@
 <Product xmlns='http://code.google.com/p/open-zwave/'>
   <!-- This thermostat's setpoint descriptions are 1 based, not 0 -->
   <CommandClass id="67" name="COMMAND_CLASS_THERMOSTAT_SETPOINT" base="0" />
+
+   <CommandClass id="49" name="COMMAND_CLASS_SENSOR_MULTILEVEL" version="1" request_flags="4" create_vars="true">
+    <Instance index="1" />
+    <Value type="decimal" genre="user" instance="1" index="1" label="Temperature" units="F" read_only="true" write_only="false" verify_changes="false" poll_intensity="0" min="0" max="0" value="75" />
+  </CommandClass>
+  
+  <CommandClass id="66" name="COMMAND_CLASS_THERMOSTAT_OPERATING_STATE">
+    <Instance index="1" />
+    <Value type="list" genre="user" instance="1" index="0" label="Operating State" units="" read_only="false" write_only="false" min="0" max="0" value="0">
+      <Item label="Idle" value="0" />
+      <Item label="Heating" value="1" />
+      <Item label="Cooling" value="2" />
+    </Value>
+    <SupportedModes>
+      <Mode index="0" label="Idle" />
+      <Mode index="1" label="Heating" />
+      <Mode index="2" label="Cooling" />
+    </SupportedModes>
+ </CommandClass>
+  
+ <CommandClass id="64" name="COMMAND_CLASS_THERMOSTAT_MODE" version="1" request_flags="4" create_vars="true">
+    <Instance index="1" />
+    <Value type="list" genre="user" instance="1" index="0" label="Mode" units="" read_only="false" write_only="false" verify_changes="false" poll_intensity="0" min="0" max="0" vindex="1" size="1">
+      <Item label="Off" value="0" />
+      <Item label="Heat" value="1" />
+      <Item label="Cool" value="2" />
+      <Item label="Resume" value="5" />
+      <Item label="Heat Econ" value="11" />
+      <Item label="Cool Econ" value="12" />
+    </Value>
+    <SupportedModes>
+      <Mode index="0" label="Off" />
+      <Mode index="1" label="Heat" />
+      <Mode index="2" label="Cool" />
+      <Mode index="5" label="Resume" />
+      <Mode index="11" label="Heat Econ" />
+      <Mode index="12" label="Cool Econ" />
+    </SupportedModes>
+  </CommandClass>
+
 </Product>

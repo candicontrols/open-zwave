@@ -405,7 +405,7 @@ Group::AssociationCommand::AssociationCommand
 	m_length( _length )
 {
 	m_data = new uint8[_length];
-	memcpy( m_data, _data, _length );
+	memcpy_s( m_data, _length, _data, _length );
 }
 
 //-----------------------------------------------------------------------------

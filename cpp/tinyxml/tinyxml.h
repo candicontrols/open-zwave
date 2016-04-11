@@ -347,7 +347,7 @@ protected:
 		}
 		else if ( *length )
 		{
-			//strncpy( _value, p, *length );	// lots of compilers don't like this function (unsafe),
+			//str-ncpy( _value, p, *length );	// lots of compilers don't like this function (unsafe),
 												// and the null terminator isn't needed
 			for( int i=0; p[i] && i<*length; ++i ) {
 				_value[i] = p[i];

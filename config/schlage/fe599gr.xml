@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Product xmlns='http://code.google.com/p/open-zwave/'>
+	<CommandClass id="152" name="COMMAND_CLASS_SECURITY" version="1" request_flags="4" create_vars="true"/>
+
+        <!-- Wake up -->
+        <!-- <CommandClass id="32" action="remove" /> -->
+        <CommandClass id="132" action="remove" /> 
+        <CommandClass id="134" action="remove" />
+        <CommandClass id="114" action="remove" />
+        <CommandClass id="112" action="remove" />
+        <CommandClass id="115" action="remove" />
+
+                        <CommandClass id="128" name="COMMAND_CLASS_BATTERY" version="1" request_flags="4" create_vars="true">
+                                <Instance index="1" />
+                                <Value type="byte" genre="user" instance="1" index="0" label="Battery Level" units="%" read_only="true" write_only="false" verify_changes="false" poll_intensity="0" min="0" max="255" value="" />
+                        </CommandClass>
+                        <CommandClass id="133" name="COMMAND_CLASS_ASSOCIATION" version="1" request_flags="4" create_vars="true">
+                                <Instance index="1" />
+                             <Associations num_groups="1">
+                               <Group index="1" max_associations="1" label="Alarms" auto="true"/>
+                             </Associations>
+                        </CommandClass>
+                        <CommandClass id="135" name="COMMAND_CLASS_INDICATOR" version="1" request_flags="4" create_vars="true">
+                                <Instance index="1" />
+                                <Value type="byte" genre="user" instance="1" index="0" label="Indicator" units="" read_only="false" write_only="false" verify_changes="false" poll_intensity="0" min="0" max="255" value="" />
+                        </CommandClass>
+
+</Product>
+

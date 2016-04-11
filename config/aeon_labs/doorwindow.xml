@@ -1,6 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Aeon Labs Door/Window Sensor -->
 <Product xmlns='http://code.google.com/p/open-zwave/'>
+
+  <!-- COMMAND_CLASS_ALARM.  This class is supported but is missing from the list reported by the SM103 -->
+  <CommandClass id="113"/>
+
+  <!-- COMMAND_CLASS_SENSOR_ALARM.  This class is supported but is missing from the list reported by the SM103 -->
+  <CommandClass id="156" />
+ 
+  <!-- Association Groups -->
+  <CommandClass id="133">
+    <Associations num_groups="1">
+      <Group index="1" max_associations="5" label="Report" auto="true" />
+    </Associations>
+  </CommandClass>
 
 	<!-- Configuration Parameters -->
 	<CommandClass id="112">

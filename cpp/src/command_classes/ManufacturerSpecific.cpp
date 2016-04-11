@@ -41,6 +41,8 @@
 #include "value_classes/ValueStore.h"
 #include "value_classes/ValueString.h"
 
+#include <syslog.h>
+
 using namespace OpenZWave;
 
 enum ManufacturerSpecificCmd
@@ -390,6 +392,13 @@ bool ManufacturerSpecific::LoadConfigXML
 	{
 		delete doc;
 		Log::Write( LogLevel_Info, _node->GetNodeId(), "Unable to find or load Config Param file %s", filename.c_str() );
+		
+		{
+			char buffer[256];
+			snprintf(buffer, sizeof(buffer), "OpenZWave: Unable to load device configuration file: %s", filename.c_str() );
+			//syslog(LOG_DEBUG, buffer);
+			
+		}
 		return false;
 	}
 

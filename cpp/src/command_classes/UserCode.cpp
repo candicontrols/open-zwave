@@ -259,7 +259,7 @@ bool UserCode::HandleMsg
 				size = UserCodeLength;
 			}
 			m_userCodesStatus[i] = _data[2];
-			memcpy( data, &_data[3], size );
+			memcpy_s( data, size, &_data[3], size );
 			value->OnValueRefreshed( data, size );
 			value->Release();
 		}

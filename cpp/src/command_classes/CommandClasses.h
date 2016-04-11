@@ -28,7 +28,7 @@
 #ifndef _CommandClasses_H
 #define _CommandClasses_H
 
-#include <string>
+//#include "string.h"
 #include <map>
 #include "Defs.h"
 
@@ -68,7 +68,7 @@ namespace OpenZWave
 
 		// m_supportedCommandClasses uses single bits to mark whether OpenZWave supports a command class
 		// Checking this is not the same as looking for non-NULL entried in m_commandClassCreators, since
-		// this may be modified by the program options --Include and --Ingnore to filter out support
+		// this may be modified by the program options --Include and --Ignore to filter out support
 		// for unwanted command classes.
 		uint32					m_supportedCommandClasses[8];
 	};

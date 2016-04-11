@@ -32,8 +32,6 @@
 #include <string>
 #include <stdint.h>
 
-
-
 // Compilation export flags
 #if (defined _WINDOWS || defined WIN32 || defined _MSC_VER) && !defined MINGW
 #	if defined OPENZWAVE_MAKEDLL	// Create the dynamic library.
@@ -45,7 +43,8 @@
 #	endif
 // Disable export warnings
 #	define OPENZWAVE_EXPORT_WARNINGS_OFF	__pragma( warning(push) )\
-											__pragma( warning(disable: 4251) )
+											__pragma( warning(disable: 4251) ) \
+											__pragma( warning(disable: 4275) )
 #	define OPENZWAVE_EXPORT_WARNINGS_ON		__pragma( warning(pop) )
 #else
 #	define OPENZWAVE_EXPORT
@@ -200,7 +199,8 @@ namespace OpenZWave
 #define MAX_MAX_TRIES		7	// Don't exceed this retry limit
 #define ACK_TIMEOUT	1000		// How long to wait for an ACK
 #define BYTE_TIMEOUT	150
-#define RETRY_TIMEOUT	40000		// Retry send after 40 seconds
+#define RETRY_TIMEOUT  2000            // Retry send after two seconds
+//#define RETRY_TIMEOUT	40000		// Retry send after 40 seconds - upstream value
 
 #define SOF												0x01
 #define ACK												0x06

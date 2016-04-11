@@ -59,7 +59,7 @@ namespace OpenZWave
 		friend class Node;
 		friend class Group;
 		friend class CommandClass;
-		friend class ControllerReplication;
+    friend class ControllerReplication;
 		friend class Value;
 		friend class ValueStore;
 		friend class ValueButton;
@@ -144,7 +144,7 @@ namespace OpenZWave
 		 * Used when deleting a node.
 		 */
 		void RemoveQueues( uint8 const _nodeId );
-
+		
 		Thread*					m_driverThread;			/**< Thread for reading from the Z-Wave controller, and for creating and managing the other threads for sending, polling etc. */
 		bool					m_exit;					/**< Flag that is set when the application is exiting. */
 		bool					m_init;					/**< Set to true once the driver has been initialised */
@@ -239,7 +239,7 @@ namespace OpenZWave
 		 */
 		void ReleaseNodes();
 
-		ControllerInterface			m_controllerInterfaceType;						// Specifies the controller's hardware interface
+		ControllerInterface     m_controllerInterfaceType;                  // Specifies the controller's hardware interface
 		string					m_controllerPath;							// name or path used to open the controller hardware.
 		Controller*				m_controller;								// Handles communications with the controller hardware.
 		uint32					m_homeId;									// Home ID of the Z-Wave controller.  Not valid until the DriverReady notification has been received.
@@ -248,7 +248,7 @@ namespace OpenZWave
 		string					m_libraryTypeName;							// Name describing the library type.
 		uint8					m_libraryType;								// Type of library used by the controller.
 
-		uint8					m_serialAPIVersion[2];
+		uint8         m_serialAPIVersion[2];
 		uint16					m_manufacturerId;
 		uint16					m_productType;
 		uint16					m_productId;
@@ -263,14 +263,14 @@ namespace OpenZWave
 
 		ControllerReplication*	m_controllerReplication;					// Controller replication is handled separately from the other command classes, due to older hand-held controllers using invalid node IDs.
 
-		uint8					m_transmitOptions;
-
+		uint8                                   m_transmitOptions;
+		
 	//-----------------------------------------------------------------------------
-	//	Receiving Z-Wave messages
-	//-----------------------------------------------------------------------------
-	private:
-		bool ReadMsg();
-		void ProcessMsg( uint8* _data );
+  //  Receiving Z-Wave messages
+  //-----------------------------------------------------------------------------
+  private:
+    bool ReadMsg();
+    void ProcessMsg( uint8* _data );
 
 		void HandleGetVersionResponse( uint8* _data );
 		void HandleGetRandomResponse( uint8* _data );
@@ -301,38 +301,38 @@ namespace OpenZWave
 		bool HandleAssignReturnRouteResponse( uint8* _data );
 		bool HandleDeleteReturnRouteResponse( uint8* _data );
 		void HandleSendNodeInformationRequest( uint8* _data );
-		void HandleSendDataResponse( uint8* _data, bool _replication );
-		bool HandleNetworkUpdateResponse( uint8* _data );
-		void HandleGetRoutingInfoResponse( uint8* _data );
+    void HandleSendDataResponse( uint8* _data, bool _replication );
+    bool HandleNetworkUpdateResponse( uint8* _data );
+    void HandleGetRoutingInfoResponse( uint8* _data );
 
-		void HandleSendDataRequest( uint8* _data, bool _replication );
-		void HandleAddNodeToNetworkRequest( uint8* _data );
-		void HandleCreateNewPrimaryRequest( uint8* _data );
-		void HandleControllerChangeRequest( uint8* _data );
-		void HandleSetLearnModeRequest( uint8* _data );
-		void HandleRemoveFailedNodeRequest( uint8* _data );
-		void HandleReplaceFailedNodeRequest( uint8* _data );
-		void HandleRemoveNodeFromNetworkRequest( uint8* _data );
-		void HandleApplicationCommandHandlerRequest( uint8* _data );
-		void HandlePromiscuousApplicationCommandHandlerRequest( uint8* _data );
-		void HandleAssignReturnRouteRequest( uint8* _data );
-		void HandleDeleteReturnRouteRequest( uint8* _data );
-		void HandleNodeNeighborUpdateRequest( uint8* _data );
-		void HandleNetworkUpdateRequest( uint8* _data );
-		bool HandleApplicationUpdateRequest( uint8* _data );
-		bool HandleRfPowerLevelSetResponse( uint8* _data );
-		bool HandleSerialApiSetTimeoutsResponse( uint8* _data );
-		bool HandleMemoryGetByteResponse( uint8* _data );
-		bool HandleReadMemoryResponse( uint8* _data );
-		void HandleGetVirtualNodesResponse( uint8* _data );
-		bool HandleSetSlaveLearnModeResponse( uint8* _data );
-		void HandleSetSlaveLearnModeRequest( uint8* _data );
-		bool HandleSendSlaveNodeInfoResponse( uint8* _data );
-		void HandleSendSlaveNodeInfoRequest( uint8* _data );
-		void HandleApplicationSlaveCommandRequest( uint8* _data );
+    void HandleSendDataRequest( uint8* _data, bool _replication );
+    void HandleAddNodeToNetworkRequest( uint8* _data );
+    void HandleCreateNewPrimaryRequest( uint8* _data );
+    void HandleControllerChangeRequest( uint8* _data );
+    void HandleSetLearnModeRequest( uint8* _data );
+    void HandleRemoveFailedNodeRequest( uint8* _data );
+    void HandleReplaceFailedNodeRequest( uint8* _data );
+    void HandleRemoveNodeFromNetworkRequest( uint8* _data );
+    void HandleApplicationCommandHandlerRequest( uint8* _data );
+    void HandlePromiscuousApplicationCommandHandlerRequest( uint8* _data );
+    void HandleAssignReturnRouteRequest( uint8* _data );
+    void HandleDeleteReturnRouteRequest( uint8* _data );
+    void HandleNodeNeighborUpdateRequest( uint8* _data );
+    void HandleNetworkUpdateRequest( uint8* _data );
+    bool HandleApplicationUpdateRequest( uint8* _data );
+    bool HandleRfPowerLevelSetResponse( uint8* _data );
+    bool HandleSerialApiSetTimeoutsResponse( uint8* _data );
+    bool HandleMemoryGetByteResponse( uint8* _data );
+    bool HandleReadMemoryResponse( uint8* _data );
+    void HandleGetVirtualNodesResponse( uint8* _data );
+    bool HandleSetSlaveLearnModeResponse( uint8* _data );
+    void HandleSetSlaveLearnModeRequest( uint8* _data );
+    bool HandleSendSlaveNodeInfoResponse( uint8* _data );
+    void HandleSendSlaveNodeInfoRequest( uint8* _data );
+    void HandleApplicationSlaveCommandRequest( uint8* _data );
 		void HandleSerialAPIResetRequest( uint8* _data );
-
-		void CommonAddNodeStatusRequestHandler( uint8 _funcId, uint8* _data );
+    
+    void CommonAddNodeStatusRequestHandler( uint8 _funcId, uint8* _data );
 
 		bool					m_waitingForAck;							// True when we are waiting for an ACK from the dongle
 		uint8					m_expectedCallbackId;						// If non-zero, we wait for a message with this callback Id
@@ -349,7 +349,7 @@ namespace OpenZWave
 		bool EnablePoll( const ValueID &_valueId, uint8 _intensity = 1 );
 		bool DisablePoll( const ValueID &_valueId );
 		bool isPolled( const ValueID &_valueId );
-		void SetPollIntensity( const ValueID &_valueId, uint8 _intensity );
+		void SetPollIntensity( const ValueID &_valueId, uint8 const _intensity );
 		static void PollThreadEntryPoint( Event* _exitEvent, void* _context );
 		void PollThreadProc( Event* _exitEvent );
 
@@ -371,7 +371,7 @@ OPENZWAVE_EXPORT_WARNINGS_ON
 	//-----------------------------------------------------------------------------
 	public:
 		uint8 GetNodeNumber( Msg const* _msg )const{ return  ( _msg == NULL ? 0 : _msg->GetTargetNodeId() ); }
-
+		
 	private:
 		/**
 		 *  Creates a new Node object (deleting any previous Node object with the same nodeId) and
@@ -390,6 +390,7 @@ OPENZWAVE_EXPORT_WARNINGS_ON
 		bool IsNodeBeamingDevice( uint8 const _nodeId );
 		bool IsNodeRoutingDevice( uint8 const _nodeId );
 		bool IsNodeSecurityDevice( uint8 const _nodeId );
+		Node::SecurityState GetSecurityState( uint8 const _nodeId );
 		uint32 GetNodeMaxBaudRate( uint8 const _nodeId );
 		uint8 GetNodeVersion( uint8 const _nodeId );
 		uint8 GetNodeSecurity( uint8 const _nodeId );
@@ -456,7 +457,7 @@ OPENZWAVE_EXPORT_WARNINGS_ON
 			ControllerCommand_AssignReturnRoute,				/**< Assign a network return routes to a device. */
 			ControllerCommand_DeleteAllReturnRoutes,			/**< Delete all return routes from a device. */
 			ControllerCommand_SendNodeInformation,				/**< Send a node information frame */
-			ControllerCommand_ReplicationSend,				/**< Send information from primary to secondary */
+			ControllerCommand_ReplicationSend,				/**< Send information from primary to secondary */			
 			ControllerCommand_CreateButton,					/**< Create an id that tracks handheld button presses */
 			ControllerCommand_DeleteButton					/**< Delete id that tracks handheld button presses */
 		};
@@ -476,33 +477,34 @@ OPENZWAVE_EXPORT_WARNINGS_ON
 			ControllerState_Sleeping,				/**< Controller command is on a sleep queue wait for device. */
 			ControllerState_InProgress,				/**< The controller is communicating with the other device to carry out the command. */
 			ControllerState_Completed,			    	/**< The command has completed successfully. */
+			ControllerState_CompletedNoChange, /**< The commmand completed ok, but no changes in state for OZW. */
 			ControllerState_Failed,					/**< The command has failed. */
 			ControllerState_NodeOK,					/**< Used only with ControllerCommand_HasNodeFailed to indicate that the controller thinks the node is OK. */
 			ControllerState_NodeFailed				/**< Used only with ControllerCommand_HasNodeFailed to indicate that the controller thinks the node has failed. */
 		};
 
-		/**
-		 * Controller Errors
-		 * Provide some more information about controller failures.
-		 */
-		enum ControllerError
-		{
-			ControllerError_None = 0,
-			ControllerError_ButtonNotFound,					/**< Button */
-			ControllerError_NodeNotFound,					/**< Button */
-			ControllerError_NotBridge,					/**< Button */
-			ControllerError_NotSUC,						/**< CreateNewPrimary */
-			ControllerError_NotSecondary,					/**< CreateNewPrimary */
-			ControllerError_NotPrimary,					/**< RemoveFailedNode, AddNodeToNetwork */
-			ControllerError_IsPrimary,					/**< ReceiveConfiguration */
-			ControllerError_NotFound,					/**< RemoveFailedNode */
-			ControllerError_Busy,						/**< RemoveFailedNode, RequestNetworkUpdate */
-			ControllerError_Failed,						/**< RemoveFailedNode, RequestNetworkUpdate */
-			ControllerError_Disabled,					/**< RequestNetworkUpdate error */
-			ControllerError_Overflow					/**< RequestNetworkUpdate error */
-		};
-
-		typedef void (*pfnControllerCallback_t)( ControllerState _state, ControllerError _err, void* _context );
+    /**
+     * Controller Errors
+     * Provide some more information about controller failures.
+     */
+    enum ControllerError
+    {
+      ControllerError_None = 0,
+      ControllerError_ButtonNotFound,         /**< Button */
+      ControllerError_NodeNotFound,         /**< Button */
+      ControllerError_NotBridge,          /**< Button */
+      ControllerError_NotSUC,           /**< CreateNewPrimary */
+      ControllerError_NotSecondary,         /**< CreateNewPrimary */
+      ControllerError_NotPrimary,         /**< RemoveFailedNode, AddNodeToNetwork */
+      ControllerError_IsPrimary,          /**< ReceiveConfiguration */
+      ControllerError_NotFound,         /**< RemoveFailedNode */
+      ControllerError_Busy,           /**< RemoveFailedNode, RequestNetworkUpdate */
+      ControllerError_Failed,           /**< RemoveFailedNode, RequestNetworkUpdate */
+      ControllerError_Disabled,         /**< RequestNetworkUpdate error */
+      ControllerError_Overflow          /**< RequestNetworkUpdate error */
+    };
+    
+    typedef void (*pfnControllerCallback_t)( ControllerState _state, ControllerError _err, void* _context );
 
 	private:
 		// The public interface is provided via the wrappers in the Manager class
@@ -512,26 +514,26 @@ OPENZWAVE_EXPORT_WARNINGS_ON
 
 		bool BeginControllerCommand( ControllerCommand _command, pfnControllerCallback_t _callback, void* _context, bool _highPower, uint8 _nodeId, uint8 _arg );
 		bool CancelControllerCommand();
-		void AddNodeStop( uint8 const _funcId );					// Handle different controller behaviors
+    void AddNodeStop( uint8 const _funcId );          // Handle different controller behaviors
+    
+    struct ControllerCommandItem
+    {
+      ControllerState       m_controllerState;
+      bool          m_controllerStateChanged;
+      bool          m_controllerCommandDone;
+      ControllerCommand     m_controllerCommand;
+      pfnControllerCallback_t     m_controllerCallback;
+      ControllerError       m_controllerReturnError;
+      void*         m_controllerCallbackContext;
+      bool          m_highPower;
+      bool          m_controllerAdded;
+      uint8         m_controllerCommandNode;
+      uint8         m_controllerCommandArg;
+    };
 
-		struct ControllerCommandItem
-		{
-			ControllerState				m_controllerState;
-			bool					m_controllerStateChanged;
-			bool					m_controllerCommandDone;
-			ControllerCommand			m_controllerCommand;
-			pfnControllerCallback_t			m_controllerCallback;
-			ControllerError				m_controllerReturnError;
-			void*					m_controllerCallbackContext;
-			bool					m_highPower;
-			bool					m_controllerAdded;
-			uint8					m_controllerCommandNode;
-			uint8					m_controllerCommandArg;
-		};
+    ControllerCommandItem*      m_currentControllerCommand;
 
-		ControllerCommandItem*			m_currentControllerCommand;
-
-		void DoControllerCommand();
+	  void DoControllerCommand();
 		void UpdateControllerState( ControllerState const _state, ControllerError const _error = ControllerError_None )
 		{
 			if( m_currentControllerCommand != NULL )
@@ -549,6 +551,7 @@ OPENZWAVE_EXPORT_WARNINGS_ON
 						case ControllerState_NodeFailed:
 						case ControllerState_NodeOK:
 						case ControllerState_Completed:
+            case ControllerState_CompletedNoChange:
 						{
 							m_currentControllerCommand->m_controllerCommandDone = true;
 							m_sendMutex->Lock();
@@ -571,11 +574,11 @@ OPENZWAVE_EXPORT_WARNINGS_ON
 		}
 
 		uint8					m_SUCNodeId;
-
+		
 		void UpdateNodeRoutes( uint8 const_nodeId, bool _doUpdate = false );
 
 		Event*					m_controllerResetEvent;
-
+		
 	//-----------------------------------------------------------------------------
 	//	Sending Z-Wave messages
 	//-----------------------------------------------------------------------------
@@ -593,14 +596,14 @@ OPENZWAVE_EXPORT_WARNINGS_ON
 			MsgQueue_Count		// Number of message queues
 		};
 
-		void SendMsg( Msg* _msg, MsgQueue const _queue );
-
-		/**
-		 * Fetch the transmit options
-		 */
-		uint8 GetTransmitOptions()const{ return m_transmitOptions; }
-
-	private:
+        void SendMsg( Msg* _msg, MsgQueue const _queue );
+    
+    /**
+     * Fetch the transmit options
+     */
+    uint8 GetTransmitOptions()const{ return m_transmitOptions; }
+    
+  private:
 		/**
 		 *  If there are messages in the send queue (m_sendQueue), gets the next message in the
 		 *  queue and writes it to the serial port.  In sending the message, SendMsg also initializes
@@ -618,15 +621,16 @@ OPENZWAVE_EXPORT_WARNINGS_ON
 		 *  m_waitingForAck, Msg::GetSendAttempts, Node::AdvanceQueries, GetCurrentNodeQuery,
 		 *  RemoveNodeQuery, Node::AllQueriesCompleted
 		 */
-		bool WriteNextMsg( MsgQueue const _queue );							// Extracts the first message from the queue, and makes it the current one.
-		bool WriteMsg( string const &str);									// Sends the current message to the Z-Wave network
-		void RemoveCurrentMsg();											// Deletes the current message and cleans up the callback etc states
+    bool WriteNextMsg( MsgQueue const _queue );             // Extracts the first message from the queue, and makes it the current one.
+    bool WriteMsg( string const &str);               // Sends the current message to the Z-Wave network
+    void FlushPollQueue();
+    void RemoveCurrentMsg();                      // Deletes the current message and cleans up the callback etc states
 		bool MoveMessagesToWakeUpQueue(	uint8 const _targetNodeId, bool const _move );		// If a node does not respond, and is of a type that can sleep, this method is used to move all its pending messages to another queue ready for when it mext wakes up.
 		bool HandleErrorResponse( uint8 const _error, uint8 const _nodeId, char const* _funcStr, bool _sleepCheck = false );									    // Handle data errors and process consistently. If message is moved to wake-up queue, return true.
-		bool IsExpectedReply( uint8 const _nodeId );						// Determine if reply message is the one we are expecting
-		void SendQueryStageComplete( uint8 const _nodeId, Node::QueryStage const _stage );
-		void RetryQueryStageComplete( uint8 const _nodeId, Node::QueryStage const _stage );
-		void CheckCompletedNodeQueries();									// Send notifications if all awake and/or sleeping nodes have completed their queries
+    bool IsExpectedReply( uint8 const _nodeId );            // Determine if reply message is the one we are expecting
+    void SendQueryStageComplete( uint8 const _nodeId, Node::QueryStage const _stage);
+    void RetryQueryStageComplete( uint8 const _nodeId, Node::QueryStage const _stage );	
+    void CheckCompletedNodeQueries();                 // Send notifications if all awake and/or sleeping nodes have completed their queries
 
 		// Requests to be sent to nodes are assigned to one of five queues.
 		// From highest to lowest priority, these are
@@ -662,12 +666,12 @@ OPENZWAVE_EXPORT_WARNINGS_ON
 		//		at regular intervals.  These are of the lowest priority, and are only
 		//		sent when nothing else is going on
 		//
-		enum MsgQueueCmd
-		{
-			MsgQueueCmd_SendMsg = 0,
-			MsgQueueCmd_QueryStageComplete,
-			MsgQueueCmd_Controller
-		};
+    enum MsgQueueCmd
+    {
+      MsgQueueCmd_SendMsg = 0,
+      MsgQueueCmd_QueryStageComplete,
+      MsgQueueCmd_Controller
+    };
 
 		class MsgQueueItem
 		{
@@ -679,27 +683,27 @@ OPENZWAVE_EXPORT_WARNINGS_ON
 				m_retry(false),
 				m_cci(NULL)
 		  	{}
+      
+      bool operator == ( MsgQueueItem const& _other )const
+      {
+        if( _other.m_command == m_command )
+        {
+          if( m_command == MsgQueueCmd_SendMsg )
+          {
+            return( (*_other.m_msg) == (*m_msg) );
+          }
+          else if( m_command == MsgQueueCmd_QueryStageComplete )
+          {
+            return( (_other.m_nodeId == m_nodeId) && (_other.m_queryStage == m_queryStage) );
+          }
+          else if( m_command == MsgQueueCmd_Controller )
+          {
+            return( (_other.m_cci->m_controllerCommand == m_cci->m_controllerCommand) && (_other.m_cci->m_controllerCallback == m_cci->m_controllerCallback) );
+          }
+        }
 
-			bool operator == ( MsgQueueItem const& _other )const
-			{
-				if( _other.m_command == m_command )
-				{
-					if( m_command == MsgQueueCmd_SendMsg )
-					{
-						return( (*_other.m_msg) == (*m_msg) );
-					}
-					else if( m_command == MsgQueueCmd_QueryStageComplete )
-					{
-						return( (_other.m_nodeId == m_nodeId) && (_other.m_queryStage == m_queryStage) );
-					}
-					else if( m_command == MsgQueueCmd_Controller )
-					{
-						return( (_other.m_cci->m_controllerCommand == m_cci->m_controllerCommand) && (_other.m_cci->m_controllerCallback == m_cci->m_controllerCallback) );
-					}
-				}
-
-				return false;
-			}
+        return false;
+      }
 
 			MsgQueueCmd			m_command;
 			Msg*				m_msg;
@@ -709,21 +713,25 @@ OPENZWAVE_EXPORT_WARNINGS_ON
 			ControllerCommandItem*		m_cci;
 		};
 
-OPENZWAVE_EXPORT_WARNINGS_OFF
-		list<MsgQueueItem>			m_msgQueue[MsgQueue_Count];
-OPENZWAVE_EXPORT_WARNINGS_ON
-		Event*					m_queueEvent[MsgQueue_Count];				// Events for each queue, which are signalled when the queue is not empty
-		Mutex*					m_sendMutex;						// Serialize access to the queues
-		Msg*					m_currentMsg;
+OPENZWAVE_EXPORT_WARNINGS_OFF  
+    list<MsgQueueItem>    m_msgQueue[MsgQueue_Count];
+ OPENZWAVE_EXPORT_WARNINGS_ON   
+    Event*         m_securityEvent;
+    uint8          m_waitingForKey;
+    TimeStamp m_securityTimer;
+    Event*          m_queueEvent[MsgQueue_Count];       // Events for each queue, which are signalled when the queue is not empty
+    Mutex*          m_sendMutex;                // Serialize access to the queues
+    Msg*          m_currentMsg;
 		MsgQueue				m_currentMsgQueueSource;			// identifies which queue held m_currentMsg
-		TimeStamp				m_resendTimeStamp;
+    TimeStamp       m_resendTimeStamp;
 
-	//-----------------------------------------------------------------------------
+
+ 	//-----------------------------------------------------------------------------
 	// Network functions
 	//-----------------------------------------------------------------------------
 	private:
 		void TestNetwork( uint8 const _nodeId, uint32 const _count );
-
+    
 	//-----------------------------------------------------------------------------
 	// Virtual Node commands
 	//-----------------------------------------------------------------------------
@@ -757,7 +765,7 @@ OPENZWAVE_EXPORT_WARNINGS_ON
 	//-----------------------------------------------------------------------------
 	private:
 		// The public interface is provided via the wrappers in the Manager class
-		bool SetConfigParam( uint8 const _nodeId, uint8 const _param, int32 _value, uint8 const _size );
+		bool SetConfigParam( uint8 const _nodeId, uint8 const _param, int32 _value, uint8 const _size, bool const _raw );
 		void RequestConfigParam( uint8 const _nodeId, uint8 const _param );
 
 	//-----------------------------------------------------------------------------
@@ -820,9 +828,9 @@ OPENZWAVE_EXPORT_WARNINGS_ON
 		void GetNodeStatistics( uint8 const _nodeId, Node::NodeData* _data );
 
 		uint32 m_SOFCnt;			// Number of SOF bytes received
-		uint32 m_ACKWaiting;			// Number of unsolcited messages while waiting for an ACK
-		uint32 m_readAborts;			// Number of times read were aborted due to timeouts
-		uint32 m_badChecksum;			// Number of bad checksums
+		uint32 m_ACKWaiting;		// Number of unsolcited messages while waiting for an ACK
+		uint32 m_readAborts;		// Number of times read were aborted due to timeouts
+		uint32 m_badChecksum;		// Number of bad checksums
 		uint32 m_readCnt;			// Number of messages successfully read
 		uint32 m_writeCnt;			// Number of messages successfully sent
 		uint32 m_CANCnt;			// Number of CAN bytes received

@@ -357,6 +357,14 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\..\src\Scene.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\..\src\Scene.h"
+				>
+			</File>
+			<File
 				RelativePath="..\..\..\src\Scene.h"
 				>
 			</File>
@@ -373,14 +381,6 @@
 			Name="Platform"
 			>
 			<File
-				RelativePath="..\..\..\src\platform\Controller.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\..\src\platform\Controller.h"
-				>
-			</File>
-			<File
 				RelativePath="..\..\..\src\platform\Event.cpp"
 				>
 			</File>
@@ -389,19 +389,15 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\..\src\platform\FileOps.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\..\src\platform\FileOps.h"
-				>
-			</File>
-			<File
 				RelativePath="..\..\..\src\platform\HidController.cpp"
 				>
 			</File>
 			<File
 				RelativePath="..\..\..\src\platform\HidController.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\..\src\platform\IController.h"
 				>
 			</File>
 			<File
@@ -421,10 +417,6 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\..\src\platform\Ref.h"
-				>
-			</File>
-			<File
 				RelativePath="..\..\..\src\platform\SerialController.cpp"
 				>
 			</File>
@@ -433,35 +425,11 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\..\src\platform\Stream.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\..\src\platform\Stream.h"
-				>
-			</File>
-			<File
 				RelativePath="..\..\..\src\platform\Thread.cpp"
 				>
 			</File>
 			<File
 				RelativePath="..\..\..\src\platform\Thread.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\..\src\platform\TimeStamp.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\..\src\platform\TimeStamp.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\..\src\platform\Wait.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\..\src\platform\Wait.h"
 				>
 			</File>
 			<Filter
@@ -476,11 +444,11 @@
 					>
 				</File>
 				<File
-					RelativePath="..\..\..\src\platform\windows\FileOpsImpl.cpp"
+					RelativePath="..\..\..\src\platform\windows\HidControllerImpl.cpp"
 					>
 				</File>
 				<File
-					RelativePath="..\..\..\src\platform\windows\FileOpsImpl.h"
+					RelativePath="..\..\..\src\platform\windows\HidControllerImpl.h"
 					>
 				</File>
 				<File
@@ -513,22 +481,6 @@
 				</File>
 				<File
 					RelativePath="..\..\..\src\platform\windows\ThreadImpl.h"
-					>
-				</File>
-				<File
-					RelativePath="..\..\..\src\platform\windows\TimeStampImpl.cpp"
-					>
-				</File>
-				<File
-					RelativePath="..\..\..\src\platform\windows\TimeStampImpl.h"
-					>
-				</File>
-				<File
-					RelativePath="..\..\..\src\platform\windows\WaitImpl.cpp"
-					>
-				</File>
-				<File
-					RelativePath="..\..\..\src\platform\windows\WaitImpl.h"
 					>
 				</File>
 			</Filter>
@@ -622,14 +574,6 @@
 			</File>
 			<File
 				RelativePath="..\..\..\src\value_classes\ValueList.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\..\src\value_classes\ValueRaw.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\..\src\value_classes\ValueRaw.h"
 				>
 			</File>
 			<File
@@ -773,14 +717,6 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\..\src\command_classes\CRC16Encap.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\..\src\command_classes\CRC16Encap.h"
-				>
-			</File>
-			<File
 				RelativePath="..\..\..\src\command_classes\EnergyProduction.cpp"
 				>
 			</File>
@@ -877,14 +813,6 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\..\src\command_classes\NoOperation.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\..\src\command_classes\NoOperation.h"
-				>
-			</File>
-			<File
 				RelativePath="..\..\..\src\command_classes\Powerlevel.cpp"
 				>
 			</File>
@@ -906,14 +834,6 @@
 			</File>
 			<File
 				RelativePath="..\..\..\src\command_classes\Protection.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\..\src\command_classes\SceneActivation.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\..\src\command_classes\SceneActivation.h"
 				>
 			</File>
 			<File
@@ -1018,14 +938,6 @@
 			</File>
 			<File
 				RelativePath="..\..\..\src\command_classes\ThermostatSetpoint.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\..\src\command_classes\UserCode.cpp"
-				>
-			</File>
-			<File
-				RelativePath="..\..\..\src\command_classes\UserCode.h"
 				>
 			</File>
 			<File

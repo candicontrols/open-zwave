@@ -27,8 +27,6 @@ namespace OZWForm
         private ZWNotification m_notification = null;
         private BindingList<Node> m_nodeList = new BindingList<Node>();
         private Byte m_rightClickNode = 0xff;
-		private string m_driverPort = string.Empty;
-
         public MainForm()
         {
             // Initialize the form
@@ -167,9 +165,9 @@ namespace OZWForm
             m_options.Create(@"..\..\..\..\..\..\..\config\", @"", @"");
 
             // Add any app specific options here...
-			m_options.AddOptionInt("SaveLogLevel", (int)ZWLogLevel.Detail);			// ordinarily, just write "Detail" level messages to the log
-			m_options.AddOptionInt("QueueLogLevel", (int)ZWLogLevel.Debug);			// save recent messages with "Debug" level messages to be dumped if an error occurs
-			m_options.AddOptionInt("DumpTriggerLevel", (int)ZWLogLevel.Error);		// only "dump" Debug  to the log emessages when an error-level message is logged
+			m_options.AddOptionInt("SaveLogLevel", (int)ZWLogLevel.Detail);
+			m_options.AddOptionInt("QueueLogLevel", (int)ZWLogLevel.Debug);
+			m_options.AddOptionInt("DumpTriggerLevel", (int)ZWLogLevel.Warning);
 
             // Lock the options
             m_options.Lock();
@@ -180,8 +178,7 @@ namespace OZWForm
             m_manager.OnNotification += new ManagedNotificationsHandler(NotificationHandler);
 
             // Add a driver
-			m_driverPort = @"\\.\COM4";
-            m_manager.AddDriver(m_driverPort);
+            m_manager.AddDriver(@"\\.\COM6");
 //			m_manager.AddDriver(@"HID Controller", ZWControllerInterface.Hid);
         }
 
@@ -325,15 +322,15 @@ namespace OZWForm
                 case ZWNotification.Type.NodeQueriesComplete:
                     {
 						// as an example, enable query of BASIC info (CommandClass = 0x20)
-                        Node node = GetNode(m_notification.GetHomeId(), m_notification.GetNodeId());
-                        //if (node != null)
-                        //{
-                        //    foreach (ZWValueID vid in node.Values)
-                        //    {
-                        //        if (vid.GetCommandClassId() == 0x84)	// remove this "if" to poll all values
-                        //            m_manager.EnablePoll(vid);
-                        //    }
-                        //}
+						Node node = GetNode(m_notification.GetHomeId(), m_notification.GetNodeId());
+						if (node != null)
+						{
+							foreach (ZWValueID vid in node.Values)
+							{
+//								if (vid.GetCommandClassId() == 0x84)	// remove this "if" to poll all values
+									m_manager.EnablePoll(vid);
+							}
+						}
 						toolStripStatusLabel1.Text = "Initializing...node " + node.ID + " query complete.";
 						break;
 					}
@@ -346,20 +343,12 @@ namespace OZWForm
                 case ZWNotification.Type.AllNodesQueried:
                     {
 						toolStripStatusLabel1.Text = "Ready:  All nodes queried.";
-						m_manager.WriteConfig(m_notification.GetHomeId());
-                        break;
-                    }
-                case ZWNotification.Type.AllNodesQueriedSomeDead:
-                    {
-						toolStripStatusLabel1.Text = "Ready:  All nodes queried but some are dead.";
-						m_manager.WriteConfig(m_notification.GetHomeId());
                         break;
                     }
                 case ZWNotification.Type.AwakeNodesQueried:
                     {
 						toolStripStatusLabel1.Text = "Ready:  Awake nodes queried (but not some sleeping nodes).";
-						m_manager.WriteConfig(m_notification.GetHomeId());
-						break;
+                        break;
                     }
             }
 
@@ -428,9 +417,19 @@ namespace OZWForm
             DoCommand( ZWControllerCommand.CreateNewPrimary);
         }
 
+        private void addControllerToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            DoCommand(ZWControllerCommand.AddController);
+        }
+
         private void addDeviceToolStripMenuItem_Click(object sender, EventArgs e)
         {
             DoCommand(ZWControllerCommand.AddDevice);
+        }
+
+        private void removeControllerToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            DoCommand(ZWControllerCommand.RemoveController);
         }
 
         private void removeDeviceToolStripMenuItem_Click(object sender, EventArgs e)
@@ -471,7 +470,7 @@ namespace OZWForm
         private void DoCommand(ZWControllerCommand command)
         {
             ControllerCommandDlg dlg = new ControllerCommandDlg(this, m_manager, m_homeId, command, m_rightClickNode);
-            DialogResult d = dlg.ShowDialog(this);
+            dlg.ShowDialog(this);
             dlg.Dispose();
         }
 
@@ -574,21 +573,6 @@ namespace OZWForm
 					return r8;
 				default:
 					return "";
-			}
-		}
-
-		private void softToolStripMenuItem_Click(object sender, EventArgs e)
-		{
-			m_manager.SoftReset(m_homeId);
-		}
-
-		private void eraseAllToolStripMenuItem_Click(object sender, EventArgs e)
-		{
-			if (DialogResult.Yes == MessageBox.Show("Are you sure you want to fully reset the controller?  This will delete all network information and require re-including all nodes.", "Hard Reset", MessageBoxButtons.YesNo))
-			{
-				m_manager.ResetController(m_homeId);
-				m_manager.RemoveDriver(m_driverPort);
-				m_manager.AddDriver(m_driverPort);
 			}
 		}
     }

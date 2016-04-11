@@ -33,9 +33,9 @@
 #include "SerialControllerImpl.h"
 #include "platform/Log.h"
 
-#ifdef __linux__
-#include <libudev.h>
-#endif
+#include <string.h>
+#include <syslog.h>
+#include <unistd.h>
 
 using namespace OpenZWave;
 
@@ -184,7 +184,7 @@ bool SerialControllerImpl::Init
 	
 	Log::Write( LogLevel_Info, "Trying to open serial port %s (attempt %d)", device.c_str(), _attempts );
 	
-	m_hSerialController = open( device.c_str(), O_RDWR | O_NOCTTY, 0 );
+	m_hSerialController = open( device.c_str(), O_RDWR | O_NOCTTY | O_CLOEXEC, 0 );
 
 	if( -1 == m_hSerialController )
 	{
@@ -193,10 +193,16 @@ bool SerialControllerImpl::Init
 		goto SerialOpenFailure;
 	}
 
+#if 0
 	if( flock( m_hSerialController, LOCK_EX | LOCK_NB) == -1 )
 	{
+		syslog(LOG_ERR, "OpenZWave: Failed to obtain serial lock");
 		Log::Write( LogLevel_Error, "ERROR: Cannot get exclusive lock for serial port %s. Error code %d", device.c_str(), errno );
+		goto SerialOpenFailure;
 	}
+#endif
+
+  fcntl(m_hSerialController, F_SETFD, FD_CLOEXEC);
 
 	int bits;
 	bits = 0;
@@ -323,7 +329,7 @@ void SerialControllerImpl::Read
 		{
 			bytesRead = read( m_hSerialController, buffer, sizeof(buffer) );
 			if( bytesRead > 0 )
-				m_owner->Put( buffer, bytesRead );
+				m_owner->Put( buffer, bytesRead );      
 		} while( bytesRead > 0 );
 
 		do
@@ -340,8 +346,10 @@ void SerialControllerImpl::Read
 
 			pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &oldstate);
 			err = select( m_hSerialController + 1, &rds, NULL, &eds, whenp );
+      
 			pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &oldstate);
 		} while( err <= 0 );
+    
 	}
 }
 

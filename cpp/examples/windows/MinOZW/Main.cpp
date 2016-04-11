@@ -215,13 +215,13 @@ void OnNotification
 
 		case Notification::Type_AwakeNodesQueried:
 		case Notification::Type_AllNodesQueried:
-		case Notification::Type_AllNodesQueriedSomeDead:
 		{
 			g_nodesQueried = true;
 			break;
 		}
 
 		case Notification::Type_DriverReset:
+		case Notification::Type_MsgComplete:
 		case Notification::Type_NodeNaming:
 		case Notification::Type_NodeProtocolInfo:
 		case Notification::Type_NodeQueriesComplete:
@@ -331,9 +331,9 @@ int main( int argc, char* argv[] )
 
 		Driver::DriverData data;
 		Manager::Get()->GetDriverStatistics( g_homeId, &data );
-		printf("SOF: %d ACK Waiting: %d Read Aborts: %d Bad Checksums: %d\n", data.m_SOFCnt, data.m_ACKWaiting, data.m_readAborts, data.m_badChecksum);
-		printf("Reads: %d Writes: %d CAN: %d NAK: %d ACK: %d Out of Frame: %d\n", data.m_readCnt, data.m_writeCnt, data.m_CANCnt, data.m_NAKCnt, data.m_ACKCnt, data.m_OOFCnt);
-		printf("Dropped: %d Retries: %d\n", data.m_dropped, data.m_retries);
+		printf("SOF: %d ACK Waiting: %d Read Aborts: %d Bad Checksums: %d\n", data.s_SOFCnt, data.s_ACKWaiting, data.s_readAborts, data.s_badChecksum);
+		printf("Reads: %d Writes: %d CAN: %d NAK: %d ACK: %d Out of Frame: %d\n", data.s_readCnt, data.s_writeCnt, data.s_CANCnt, data.s_NAKCnt, data.s_ACKCnt, data.s_OOFCnt);
+		printf("Dropped: %d Retries: %d\n", data.s_dropped, data.s_retries);
 	}
 
 	// program exit (clean up)

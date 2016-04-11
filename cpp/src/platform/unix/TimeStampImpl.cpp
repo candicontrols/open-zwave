@@ -30,6 +30,8 @@
 #include "Defs.h"
 #include "TimeStampImpl.h"
 
+#include <time.h>
+
 using namespace OpenZWave;
 
 //-----------------------------------------------------------------------------
@@ -62,11 +64,16 @@ void TimeStampImpl::SetTime
 	int32 _milliseconds	// = 0
 )
 {
-    struct timeval now;
-    gettimeofday(&now, NULL);
+    clock_gettime(CLOCK_MONOTONIC, &m_stamp);
     
-    m_stamp.tv_sec = now.tv_sec + (_milliseconds / 1000);
-    
+    m_stamp.tv_sec  +=  (_milliseconds / 1000);
+    m_stamp.tv_nsec +=  (_milliseconds % 1000) * 1000 * 1000;
+    if (m_stamp.tv_nsec >= (1000 * 1000 * 1000)) {
+      m_stamp.tv_sec++;
+      m_stamp.tv_nsec -= (1000 * 1000 * 1000);
+    }
+   
+#if 0  
     // Now add the remainder of our timeout to the microseconds part of 'now'
     now.tv_usec += ((_milliseconds % 1000) * 1000);
     
@@ -79,6 +86,7 @@ void TimeStampImpl::SetTime
     }
     
     m_stamp.tv_nsec = now.tv_usec * 1000;
+#endif    
 }
 
 //-----------------------------------------------------------------------------
@@ -91,14 +99,16 @@ int32 TimeStampImpl::TimeRemaining
 {
     int32 diff;
     
-    struct timeval now;   
-    gettimeofday(&now, NULL);
+    struct timespec now;   
+    //gettimeofday(&now, NULL);
+    clock_gettime(CLOCK_MONOTONIC, &now);
     
     // Seconds
     diff = (int32)((m_stamp.tv_sec - now.tv_sec)*1000);
     
     // Milliseconds
-    diff += (((m_stamp.tv_nsec/1000)-now.tv_usec)/1000);
+    //diff += (((m_stamp.tv_nsec/1000)-now.tv_usec)/1000);
+    diff += (m_stamp.tv_nsec - now.tv_nsec) / (1000 * 1000);
     
     return diff;
 }

@@ -200,7 +200,7 @@ bool ThermostatSetpoint::RequestValue
 		msg->SetInstance( this, _instance );
 		msg->Append( GetNodeId() );
 		msg->Append( 3 );
-		msg->Append( GetCommandClassId() );
+		msg->AppendDuplicateClassId( GetCommandClassId() );
 		msg->Append( ThermostatSetpointCmd_Get );
 		msg->Append( _setPointIndex );
 		msg->Append( GetDriver()->GetTransmitOptions() );
@@ -221,7 +221,7 @@ bool ThermostatSetpoint::HandleMsg
 	uint32 const _instance	// = 1
 )
 {
-	if( ThermostatSetpointCmd_Report == (ThermostatSetpointCmd)_data[0] )
+	if( ThermostatSetpointCmd_Report == (ThermostatSetpointCmd)_data[0] && (_length >= 5))
 	{
 		// We have received a thermostat setpoint value from the Z-Wave device
 		if( ValueDecimal* value = static_cast<ValueDecimal*>( GetValue( _instance, _data[1] ) ) )
@@ -290,11 +290,11 @@ bool ThermostatSetpoint::SetValue
 		ValueDecimal const* value = static_cast<ValueDecimal const*>(&_value);
 		uint8 scale = strcmp( "C", value->GetUnits().c_str() ) ? 1 : 0;
 
-		Msg* msg = new Msg( "ThermostatSetpointCmd_Set", GetNodeId(), REQUEST, FUNC_ID_ZW_SEND_DATA, true );
+		Msg* msg = new Msg("ThermostatSetpointCmd_Set " + value->GetID().GetIndex() , GetNodeId(), REQUEST, FUNC_ID_ZW_SEND_DATA, true );
 		msg->SetInstance( this, _value.GetID().GetInstance() );
 		msg->Append( GetNodeId() );
 		msg->Append( 4 + GetAppendValueSize( value->GetValue() ) );
-		msg->Append( GetCommandClassId() );
+		msg->AppendDuplicateClassId( GetCommandClassId() );
 		msg->Append( ThermostatSetpointCmd_Set );
 		msg->Append( value->GetID().GetIndex() );
 		AppendValue( msg, value->GetValue(), scale );

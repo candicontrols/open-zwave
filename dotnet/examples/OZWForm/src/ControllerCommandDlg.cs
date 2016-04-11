@@ -17,7 +17,6 @@ namespace OZWForm
         static private ManagedControllerStateChangedHandler m_controllerStateChangedHandler = new ManagedControllerStateChangedHandler(ControllerCommandDlg.MyControllerStateChangedHandler);
 		static private ZWControllerCommand m_op;
         static private Byte m_nodeId;
-		static private DialogResult result;
 
 		private MainForm m_mainDlg;
 		public MainForm MainDlg
@@ -38,13 +37,12 @@ namespace OZWForm
 
 			switch (m_op)
 			{
-				case ZWControllerCommand.RequestNodeNeighborUpdate:
-					{
-						this.Text = "Node Neighbor Update";
-						this.label1.Text = "Request that a node update its list of neighbors.";
-						break;
-					}
-
+                case ZWControllerCommand.AddController:
+				{
+					this.Text = "Add Controller";
+					this.label1.Text = "Put the target controller into receive configuration mode.\nThe PC Z-Wave Controller must be within 2m of the controller being added.";
+					break;
+				}
                 case ZWControllerCommand.AddDevice:
 				{
 					this.Text = "Add Device";
@@ -61,6 +59,12 @@ namespace OZWForm
 				{
 					this.Text = "Receive Configuration";
 					this.label1.Text = "Transfering the network configuration\nfrom another controller.\n\nPlease bring the other controller within 2m of the PC controller and set it to send its network configuration.";
+					break;
+				}
+                case ZWControllerCommand.RemoveController:
+				{
+					this.Text = "RemoveController";
+					this.label1.Text = "Put the target controller into receive configuration mode.\nThe PC Z-Wave Controller must be within 2m of the controller being added.";
 					break;
 				}
                 case ZWControllerCommand.RemoveDevice:
@@ -136,7 +140,6 @@ namespace OZWForm
 		            // The command is now complete
                     dlgText = "Command Completed OK.";
                     complete = true;
-					result = DialogResult.OK;
 		            break;
 		        }
 		        case ZWControllerState.Failed:
@@ -145,22 +148,19 @@ namespace OZWForm
 		            // The command is now complete
                     dlgText = "Command Failed.";
                     complete = true;
-					result = DialogResult.Abort;
-					break;
+		            break;
 		        }
                 case ZWControllerState.NodeOK:
                 {
                     dlgText = "Node has not failed.";
                     complete = true;
-					result = DialogResult.No;
-					break;
+                    break;
                 }
                 case ZWControllerState.NodeFailed:
                 {
                     dlgText = "Node has failed.";
                     complete = true;
-					result = DialogResult.Yes;
-					break;
+                    break;
                 }
 		    }
 
@@ -229,7 +229,6 @@ namespace OZWForm
 
 			// Close the dialog
 			Close();
-			m_dlg.DialogResult = result;
 		}
  	}
 }

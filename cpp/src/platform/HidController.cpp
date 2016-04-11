@@ -25,6 +25,8 @@
 //
 //-----------------------------------------------------------------------------
 
+#if 0
+
 #include "Msg.h"
 #include "platform/Thread.h"
 #include "platform/Event.h"
@@ -481,7 +483,7 @@ uint32 HidController::Write
 	memset(hidBuffer, 0, FEATURE_REPORT_LENGTH);
 	hidBuffer[0] = 0x4;
 	hidBuffer[1] = (uint8)_length;
-	memcpy(&hidBuffer[2], _buffer, _length);
+	memcpy_s(&hidBuffer[2], _length, _buffer, _length);
 
 	Log::Write( LogLevel_Debug, "      HidController::Write (sent to controller)" );
 	LogData(_buffer, _length, "      Write: ");
@@ -539,3 +541,5 @@ int HidController::SendFeatureReport
 	return result;
 }
 
+
+#endif

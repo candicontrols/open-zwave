@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Product xmlns='http://code.google.com/p/open-zwave/'>
+	<CommandClass id="152" name="COMMAND_CLASS_SECURITY" version="1" request_flags="4" create_vars="true"/>
+
+        <CommandClass id="98" name="COMMAND_CLASS_DOOR_LOCK" version="1" request_flags="4" create_vars="true"/>
+
+        <!-- Wake up -->
+        <CommandClass id="32" action="remove" />
+        <CommandClass id="132" action="remove" /> 
+        <CommandClass id="134" action="remove" />
+        <CommandClass id="114" action="remove" />
+        
+        <CommandClass id="113" name="COMMAND_CLASS_ALARM" version="1" request_flags="4" create_vars="true"/>
+        
+        <CommandClass id="133" name="COMMAND_CLASS_ASSOCIATION" version="1" request_flags="4" create_vars="true">
+                <Instance index="1" />
+                <Associations num_groups="1">
+		  <Group index="1" max_associations="1" label="Alarms" auto="true"/>
+                </Associations>
+        </CommandClass>        
+</Product>
+

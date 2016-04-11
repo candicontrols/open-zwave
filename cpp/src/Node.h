@@ -75,7 +75,7 @@ namespace OpenZWave
 		friend class ClimateControlSchedule;
 		friend class Clock;
 		friend class CommandClass;
-		friend class ControllerReplication;
+    friend class ControllerReplication;
 		friend class EnergyProduction;
 		friend class Hail;
 		friend class Indicator;
@@ -229,19 +229,18 @@ namespace OpenZWave
 		 *  - m_beaming (device is beam capable)
 		 */
 		void UpdateProtocolInfo( uint8 const* _data );
-		void UpdateNodeInfo( uint8 const* _data, uint8 const _length );
+		void UpdateNodeInfo( uint8 const* _data, uint8 const _length, bool _security );
 
 		bool ProtocolInfoReceived()const{ return m_protocolInfoReceived; }
 		bool NodeInfoReceived()const{ return m_nodeInfoReceived; }
 
 		bool AllQueriesCompleted()const{ return( QueryStage_Complete == m_queryStage ); }
-
-		/**
-		 * Handle dead node detection tracking.
-		 * Use this routine to set state of nodes.
-		 * Tracks state as well as send notifications.
-		 */
-		void SetNodeAlive( bool const _isAlive );
+    /**
+     * Handle dead node detection tracking.
+     * Use this routine to set state of nodes.
+     * Tracks state as well as send notifications.
+     */
+    void SetNodeAlive( bool const _isAlive );
 
 	private:
 		void SetStaticRequests();
@@ -273,6 +272,15 @@ namespace OpenZWave
 			SecurityFlag_OptionalFunctionality		= 0x80
 		};
 
+		enum SecurityState
+		{
+			SecurityState_NotSupported			= 0x01,
+			SecurityState_Initializing			= 0x02,
+			SecurityState_Negotiating			= 0x03,
+			SecurityState_Secure				= 0x04,
+			SecurityState_Failed				= 0x05
+		};
+		
 		// Node Ids
 		enum
 		{
@@ -296,6 +304,8 @@ namespace OpenZWave
 		string const& GetType()const{ return m_type; }
 		uint32 GetNeighbors( uint8** o_associations );
 		bool IsController()const{ return ( m_basic == 0x01 || m_basic == 0x02 ) && ( m_generic == 0x01 || m_generic == 0x02 ); }
+		void SetSecurityState(SecurityState _state);
+		SecurityState GetSecurityState() { return m_securityState; }
 		bool IsAddingNode() const { return m_addingNode; }	/* These three *AddingNode functions are used to tell if we this node is just being discovered. Currently used by the Security CC to initiate the Network Key Exchange */
 		void SetAddingNode() { m_addingNode = true; }
 		void ClearAddingNode() { m_addingNode = false; }
@@ -308,6 +318,7 @@ namespace OpenZWave
 		uint32		m_maxBaudRate;
 		uint8		m_version;
 		bool		m_security;
+		SecurityState 	m_securityState;
 		uint32		m_homeId;
 		uint8		m_nodeId;
 		uint8		m_basic;		//*< Basic device class (0x01-Controller, 0x02-Static Controller, 0x03-Slave, 0x04-Routing Slave
@@ -418,9 +429,9 @@ namespace OpenZWave
 	public:
 		ValueID CreateValueID( ValueID::ValueGenre const _genre, uint8 const _commandClassId, uint8 const _instance, uint8 const _valueIndex, ValueID::ValueType const _type );
 
-		Value* GetValue( ValueID const& _id );
+		Value* GetValue( ValueID const& _id );    
 		Value* GetValue( uint8 const _commandClassId, uint8 const _instance, uint8 const _valueIndex );
-		bool RemoveValue( uint8 const _commandClassId, uint8 const _instance, uint8 const _valueIndex );
+    bool RemoveValue( uint8 const _commandClassId, uint8 const _instance, uint8 const _valueIndex );
 
 		// Helpers for creating values
 		bool CreateValueBool( ValueID::ValueGenre const _genre, uint8 const _commandClassId, uint8 const _instance, uint8 const _valueIndex, string const& _label, string const& _units, bool const _readOnly, bool const _writeOnly, bool const _default, uint8 const _pollIntensity );
@@ -429,7 +440,7 @@ namespace OpenZWave
 		bool CreateValueDecimal( ValueID::ValueGenre const _genre, uint8 const _commandClassId, uint8 const _instance, uint8 const _valueIndex, string const& _label, string const& _units, bool const _readOnly, bool const _writeOnly, string const& _default, uint8 const _pollIntensity );
 		bool CreateValueInt( ValueID::ValueGenre const _genre, uint8 const _commandClassId, uint8 const _instance, uint8 const _valueIndex, string const& _label, string const& _units, bool const _readOnly, bool const _writeOnly, int32 const _default, uint8 const _pollIntensity );
 		bool CreateValueList( ValueID::ValueGenre const _genre, uint8 const _commandClassId, uint8 const _instance, uint8 const _valueIndex, string const& _label, string const& _units, bool const _readOnly, bool const _writeOnly, uint8 const _size, vector<ValueList::Item> const& _items, int32 const _default, uint8 const _pollIntensity );
-		bool CreateValueRaw( ValueID::ValueGenre const _genre, uint8 const _commandClassId, uint8 const _instance, uint8 const _valueIndex, string const& _label, string const& _units, bool const _readOnly, bool const _writeOnly, uint8 const* _default, uint8 const _length, uint8 const _pollIntensity );
+    bool CreateValueRaw( ValueID::ValueGenre const _genre, uint8 const _commandClassId, uint8 const _instance, uint8 const _valueIndex, string const& _label, string const& _units, bool const _readOnly, bool const _writeOnly, uint8 const* _default, uint8 const _length, uint8 const _pollIntensity );
 		bool CreateValueSchedule( ValueID::ValueGenre const _genre, uint8 const _commandClassId, uint8 const _instance, uint8 const _valueIndex, string const& _label, string const& _units, bool const _readOnly, bool const _writeOnly, uint8 const _pollIntensity );
 		bool CreateValueShort( ValueID::ValueGenre const _genre, uint8 const _commandClassId, uint8 const _instance, uint8 const _valueIndex, string const& _label, string const& _units, bool const _readOnly, bool const _writeOnly, int16 const _default, uint8 const _pollIntensity );
 		bool CreateValueString( ValueID::ValueGenre const _genre, uint8 const _commandClassId, uint8 const _instance, uint8 const _valueIndex, string const& _label, string const& _units, bool const _readOnly, bool const _writeOnly, string const& _default, uint8 const _pollIntensity );
@@ -449,7 +460,7 @@ namespace OpenZWave
 	// Configuration Parameters (handled by the Configuration command class)
 	//-----------------------------------------------------------------------------
 	private:
-		bool SetConfigParam( uint8 const _param, int32 _value, uint8 const _size );
+		bool SetConfigParam( uint8 const _param, int32 _value, uint8 const _size, bool const _raw );
 		void RequestConfigParam( uint8 const _param );
 		bool RequestAllConfigParams( uint32 const _requestFlags );
 
@@ -513,7 +524,7 @@ namespace OpenZWave
 		};
 
 
-		bool SetDeviceClasses( uint8 const _basic, uint8 const _generic, uint8 const _specific );	// Set the device class data for the node
+		bool SetDeviceClasses( uint8 const _basic, uint8 const _generic, uint8 const _specific, bool _mandatory );	// Set the device class data for the node
 		bool AddMandatoryCommandClasses( uint8 const* _commandClasses );							// Add mandatory command classes as specified in the device_classes.xml to the node.
 		void ReadDeviceClasses();																	// Read the static device class data from the device_classes.xml file
 		string GetEndPointDeviceClassLabel( uint8 const _generic, uint8 const _specific );
@@ -552,7 +563,7 @@ namespace OpenZWave
 			list<CommandClassData> m_ccData;
 		};
 
-	private:
+		private:
 		void GetNodeStatistics( NodeData* _data );
 
 		uint32 m_sentCnt;				// Number of messages sent from this node.
@@ -571,7 +582,7 @@ namespace OpenZWave
 		uint8 m_lastReceivedMessage[254];		// Place to hold last received message
 		uint8 m_errors;					// Count errors for dead node detection
 	};
-
+	
 } //namespace OpenZWave
 
 #endif //_Node_H

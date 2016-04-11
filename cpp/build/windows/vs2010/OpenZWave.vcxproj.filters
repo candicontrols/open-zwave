@@ -72,9 +72,6 @@
     <ClInclude Include="..\..\..\src\command_classes\ControllerReplication.h">
       <Filter>Command Classes</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\src\command_classes\CRC16Encap.h">
-      <Filter>Command Classes</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\..\src\command_classes\EnergyProduction.h">
       <Filter>Command Classes</Filter>
     </ClInclude>
@@ -270,6 +267,9 @@
     <ClInclude Include="..\..\..\src\Scene.h">
       <Filter>Main</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\src\AES.h">
+      <Filter>Main</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\..\src\platform\TimeStamp.h">
       <Filter>Platform</Filter>
     </ClInclude>
@@ -294,21 +294,7 @@
     <ClInclude Include="..\..\..\src\Scene.h">
       <Filter>Main</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\src\command_classes\SceneActivation.h">
-      <Filter>Command Classes</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\command_classes\NoOperation.h">
-      <Filter>Command Classes</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\command_classes\UserCode.h">
-      <Filter>Command Classes</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\value_classes\ValueRaw.h">
-      <Filter>Value Classes</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\command_classes\UserCode.h">
-      <Filter>Command Classes</Filter>
-    </ClInclude>
+>>>>>>> .r532
     <ClInclude Include="..\..\..\src\aes\brg_types.h">
       <Filter>AES</Filter>
     </ClInclude>
@@ -359,9 +345,6 @@
     <ClCompile Include="..\..\..\src\platform\Event.cpp">
       <Filter>Platform</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\src\platform\FileOps.cpp">
-      <Filter>Platform</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\..\src\platform\Log.cpp">
       <Filter>Platform</Filter>
     </ClCompile>
@@ -372,9 +355,6 @@
       <Filter>Platform</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\platform\windows\EventImpl.cpp">
-      <Filter>Platform\Windows</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\platform\windows\FileOpsImpl.cpp">
       <Filter>Platform\Windows</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\platform\windows\LogImpl.cpp">
@@ -462,9 +442,6 @@
       <Filter>Command Classes</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\command_classes\ControllerReplication.cpp">
-      <Filter>Command Classes</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\command_classes\CRC16Encap.cpp">
       <Filter>Command Classes</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\command_classes\EnergyProduction.cpp">
@@ -605,17 +582,11 @@
     <ClCompile Include="..\..\..\src\Scene.cpp">
       <Filter>Main</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\src\command_classes\SceneActivation.cpp">
+    <ClCompile Include="..\..\..\src\command_classes\Security.cpp">
       <Filter>Command Classes</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\src\command_classes\NoOperation.cpp">
-      <Filter>Command Classes</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\value_classes\ValueRaw.cpp">
-      <Filter>Value Classes</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\command_classes\UserCode.cpp">
-      <Filter>Command Classes</Filter>
+    <ClCompile Include="..\..\..\src\AES.cpp">
+      <Filter>Main</Filter>
     </ClCompile>
     <ClCompile Include="..\winversion.cpp">
       <Filter>Main</Filter>

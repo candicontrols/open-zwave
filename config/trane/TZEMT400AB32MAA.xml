@@ -1,7 +1,65 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Product xmlns='http://code.google.com/p/open-zwave/'>
+	<Protocol nodeinfosupported="false" />
+
 
 	<!-- Trane Thermostat Model TZEMT400AB32MAA -->
+
+	  <CommandClass id="49" name="COMMAND_CLASS_SENSOR_MULTILEVEL" version="1" request_flags="4" create_vars="true">
+    <Instance index="1" />
+    <Value type="decimal" genre="user" instance="1" index="1" label="Temperature" units="F" read_only="true" write_only="false" verify_changes="false" poll_intensity="0" min="0" max="0" value="75" />
+  </CommandClass>
+
+  <CommandClass id="66" name="COMMAND_CLASS_THERMOSTAT_OPERATING_STATE">
+    <Instance index="1" />
+    <Value type="list" genre="user" instance="1" index="0" label="Operating State" units="" read_only="false" write_only="false" min="0" max="0" value="0" size="1">
+      <Item label="Idle" value="0" />
+      <Item label="Heating" value="1" />
+      <Item label="Cooling" value="2" />
+    </Value>
+    <SupportedModes>
+      <Mode index="0" label="Idle" />
+      <Mode index="1" label="Heating" />
+      <Mode index="2" label="Cooling" />
+    </SupportedModes>
+ </CommandClass>
+
+  
+  <!-- The thermostat does not properly report its operating modes -->
+  <CommandClass id="64" name="COMMAND_CLASS_THERMOSTAT_MODE" version="1" request_flags="4" create_vars="true">
+    <Value type="list" genre="user" instance="1" index="0" label="Mode" units="" read_only="false" write_only="false" min="0" max="0" value="0" size="1">
+      <Item label="Off" value="0" />
+      <Item label="Heat" value="1" />
+      <Item label="Cool" value="2" />
+      <Item label="Auto" value="3" />
+      <Item label="Aux Heat" value="4" />
+    </Value>
+    <SupportedModes>
+      <Mode index="0" label="Off" />
+      <Mode index="1" label="Heat" />
+      <Mode index="2" label="Cool" />
+      <Mode index="3" label="Auto" />
+      <Mode index="4" label="Aux Heat" />
+    </SupportedModes>
+  </CommandClass>
+
+  <CommandClass id="67" name="COMMAND_CLASS_THERMOSTAT_SETPOINT" base="0">
+    <Instance index="1" />
+    <Value type="decimal" genre="user" instance="1" index="1" label="Heating 1" units="F" read_only="false" write_only="false" min="0" max="0" value="65" />
+    <Value type="decimal" genre="user" instance="1" index="2" label="Cooling 1" units="F" read_only="false" write_only="false" min="0" max="0" value="80" />
+  </CommandClass>
+
+  <CommandClass id="68" name="COMMAND_CLASS_THERMOSTAT_FAN_MODE" version="1" request_flags="4" create_vars="true">
+    <Instance index="1" />
+    <Value type="list" genre="user" instance="1" index="0" label="Fan Mode" units="" read_only="false" write_only="false" verify_changes="false" poll_intensity="0" min="0" max="0" vindex="0" size="1">
+      <Item label="Auto Low" value="0" />
+      <Item label="On Low" value="1" />
+    </Value>
+    <SupportedModes>
+      <Mode index="0" label="Auto Low" />
+      <Mode index="1" label="On Low" />
+    </SupportedModes>
+  </CommandClass>
 
 	<!-- Configuration Parameters -->
 	<CommandClass id="112">
@@ -20,20 +78,18 @@
 	      0 = w/Cool, 1 = w/Heat
 	    </Help>
 	  </Value>
-	  <Value type="byte" index="4" genre="config" label="F/C Units" units="" min="0" max="1" value="1">
-	    <Help>
-	      0 = C, 1 = F
-	    </Help>
+	  <Value type="list" index="4" genre="config" label="F/C Units" units="" value="0" min="0" max="1" size="1">
+	    <Item label="C" value="0" />
+	    <Item label="F" value="1" />
 	  </Value>
 	  <Value type="byte" index="5" genre="config" label="Unknown-5" units="" min="" max="" value="1">
 	    <Help>
 	    </Help>
 	  </Value>
-	  <Value type="byte" index="9" genre="config" label="Display Lock" units="" min="0" max="1" value="0">
-	    <Help>
-	      0 = Unlocked, 1 = Locked
-	    </Help>
-	  </Value>
+	  <Value type="list" index="9" genre="config" label="Display Lock" units="" min="0" max="1" value="0" size="1">
+	    <Item label="Unlocked" value="0" />
+	    <Item label="Locked" value="1" />
+	   </Value>
 	  <Value type="byte" index="10" genre="config" label="Minimum Off Time" units="minutes" min="5" max="9" value="5">
 	    <Help>
 	      Sets the minimum off time before another heating/cooling cycle can begin to provide compressor short cycle protection.  The thermostat screen will display WAIT when minimum off time is being enforced.

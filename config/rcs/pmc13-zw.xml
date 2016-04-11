@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Product xmlns='http://code.google.com/p/open-zwave/'>
+	<CommandClass id="32" name="COMMAND_CLASS_BASIC" version="1" request_flags="4" create_vars="true">
+		<Instance index="1" />
+		<Value type="byte" genre="all" instance="1" index="0" label="Basic" units="" read_only="false" write_only="false" min="0" max="255" value="0" />
+	</CommandClass>
+
+	<CommandClass id="37" name="COMMAND_CLASS_SWITCH_BINARY" version="1" request_flags="4" create_vars="true">
+		<Instance index="1" />
+		<Value type="bool" genre="user" instance="1" index="0" label="Switch" units="" read_only="false" write_only="false" min="0" max="0" value="False" />
+	</CommandClass>
+
+	<CommandClass id="50" name="COMMAND_CLASS_METER" version="3" request_flags="2" create_vars="true">
+		<Instance index="1" />
+		<Value type="decimal" genre="user" instance="1" index="0" label="Energy" units="kWh" read_only="true" write_only="false" min="0" max="0" value="0.00" />
+		<Value type="decimal" genre="user" instance="1" index="1" label="Previous Reading" units="kWh" read_only="true" write_only="false" min="0" max="0" value="0.00" />
+		<Value type="int" genre="user" instance="1" index="2" label="Interval" units="seconds" read_only="true" write_only="false" min="-2147483648" max="2147483647" value="0" />
+		<Value type="decimal" genre="user" instance="1" index="4" label="Energy (kVAh)" units="kVAh" read_only="true" write_only="false" min="0" max="0" value="0" />
+		<Value type="decimal" genre="user" instance="1" index="5" label="Previous Reading" units="kVAh" read_only="true" write_only="false" min="0" max="0" value="0.00" />
+		<Value type="int" genre="user" instance="1" index="6" label="Interval" units="seconds" read_only="true" write_only="false" min="-2147483648" max="2147483647" value="0" />
+		<Value type="decimal" genre="user" instance="1" index="8" label="Power" units="W" read_only="true" write_only="false" min="0" max="0" value="0" />
+		<Value type="decimal" genre="user" instance="1" index="9" label="Previous Reading" units="W" read_only="true" write_only="false" min="0" max="0" value="0" />
+		<Value type="int" genre="user" instance="1" index="10" label="Interval" units="seconds" read_only="true" write_only="false" min="-2147483648" max="2147483647" value="0" />
+		<Value type="decimal" genre="user" instance="1" index="16" label="Voltage" units="V" read_only="true" write_only="false" min="0" max="0" value="0" />
+		<Value type="decimal" genre="user" instance="1" index="17" label="Previous Reading" units="V" read_only="true" write_only="false" min="0" max="0" value="0.00" />
+		<Value type="int" genre="user" instance="1" index="18" label="Interval" units="seconds" read_only="true" write_only="false" min="-2147483648" max="2147483647" value="0" />
+		<Value type="decimal" genre="user" instance="1" index="20" label="Current" units="A" read_only="true" write_only="false" min="0" max="0" value="0" />
+		<Value type="decimal" genre="user" instance="1" index="21" label="Previous Reading" units="A" read_only="true" write_only="false" min="0" max="0" value="0.00" />
+		<Value type="int" genre="user" instance="1" index="22" label="Interval" units="seconds" read_only="true" write_only="false" min="-2147483648" max="2147483647" value="1632" />
+		<Value type="decimal" genre="user" instance="1" index="24" label="Power Factor" units="Power Factor" read_only="true" write_only="false" min="0" max="0" value="1" />
+		<Value type="decimal" genre="user" instance="1" index="25" label="Previous Reading" units="Power Factor" read_only="true" write_only="false" min="0" max="0" value="0" />
+		<Value type="int" genre="user" instance="1" index="26" label="Interval" units="seconds" read_only="true" write_only="false" min="-2147483648" max="2147483647" value="1633" />
+		<Value type="bool" genre="user" instance="1" index="32" label="Exporting" units="" read_only="true" write_only="false" min="0" max="0" value="False" />
+		<Value type="trigger" genre="system" instance="1" index="33" label="Reset" units="" read_only="false" write_only="true" min="0" max="0" />
+	</CommandClass>
+
+	<CommandClass id="112" name="COMMAND_CLASS_CONFIGURATION" version="1" request_flags="4" create_vars="true">
+		<Instance index="1" />
+	</CommandClass>
+
+
+	<CommandClass id="114" name="COMMAND_CLASS_MANUFACTURER_SPECIFIC" version="1" request_flags="4" create_vars="true">
+		<Instance index="1" />
+	</CommandClass>
+
+
+	<CommandClass id="115" name="COMMAND_CLASS_POWERLEVEL" version="1" request_flags="4" create_vars="true">
+		<Instance index="1" />
+	</CommandClass>
+
+        <CommandClass id="133" name="COMMAND_CLASS_ASSOCIATION" version="1" request_flags="4" create_vars="true">
+                <Instance index="1" />
+                <Associations num_groups="1">
+                  <Group index="1" max_associations="5" label="Group 1" auto="true">
+                    <Node id="1" />
+                  </Group>
+                </Associations>
+        </CommandClass>
+
+
+</Product>
+

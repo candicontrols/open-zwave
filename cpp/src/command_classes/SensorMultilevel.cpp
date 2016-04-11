@@ -89,7 +89,7 @@ static char const* c_sensorTypeNames[] =
 		"Temperature",
 		"General",
 		"Luminance",
-		"Power",
+		"Power (Sensor)",
 		"Relative Humidity",
 		"Velocity",
 		"Direction",

@@ -35,6 +35,8 @@
 
 #include "value_classes/ValueString.h"
 
+#include "tinyxml.h"
+
 using namespace OpenZWave;
 
 enum ThermostatOperatingStateCmd
@@ -62,6 +64,92 @@ static char const* c_stateName[] =
 	"State 14",
 	"State 15"
 };
+
+#if 0
+
+//-----------------------------------------------------------------------------
+// <ThermostatOperatingState::ReadXML>
+// Read the supported modes
+//-----------------------------------------------------------------------------
+void ThermostatOperatingState::ReadXML
+( 
+  TiXmlElement const* _ccElement
+)
+{
+  CommandClass::ReadXML( _ccElement );
+
+  if( Node* node = GetNodeUnsafe() )
+  {
+    node = node;
+    vector<ValueList::Item> supportedModes;
+
+    TiXmlElement const* supportedModesElement = _ccElement->FirstChildElement( "SupportedModes" );
+    if( supportedModesElement )
+    {
+      TiXmlElement const* modeElement = supportedModesElement->FirstChildElement();
+      while( modeElement )
+      {
+        char const* str = modeElement->Value();
+        if( str && !strcmp( str, "Mode" ) )
+        {
+          int index;
+          if( TIXML_SUCCESS == modeElement->QueryIntAttribute( "index", &index ) )
+          {
+            ValueList::Item item;
+            item.m_value = index;
+            item.m_label = c_stateName[index];
+            supportedModes.push_back( item );
+          }
+        }
+
+        modeElement = modeElement->NextSiblingElement();
+      }
+    }
+
+    if( !supportedModes.empty() )
+    {
+      m_supportedModes = supportedModes;
+      ClearStaticRequest( StaticRequest_Values );
+      CreateVars( 1 ); 
+    }
+  }
+}
+
+//-----------------------------------------------------------------------------
+// <ThermostatOperatingState::WriteXML>
+// Save the supported modes
+//-----------------------------------------------------------------------------
+void ThermostatOperatingState::WriteXML
+( 
+  TiXmlElement* _ccElement
+)
+{
+  CommandClass::WriteXML( _ccElement );
+
+  if( Node* node = GetNodeUnsafe() )
+  {
+    node = node;
+    TiXmlElement* supportedModesElement = new TiXmlElement( "SupportedModes" );
+    _ccElement->LinkEndChild( supportedModesElement );
+
+    for( vector<ValueList::Item>::iterator it = m_supportedModes.begin(); it != m_supportedModes.end(); ++it )
+    {
+      ValueList::Item const& item = *it;
+
+      TiXmlElement* modeElement = new TiXmlElement( "Mode" );
+      supportedModesElement->LinkEndChild( modeElement );
+
+      char str[8];
+      snprintf( str, 8, "%d", item.m_value );
+      modeElement->SetAttribute( "index", str );
+      modeElement->SetAttribute( "label", item.m_label.c_str() );
+    }
+  }
+}
+
+
+#endif
+
 
 //-----------------------------------------------------------------------------
 // <ThermostatOperatingState::RequestState>
@@ -99,7 +187,7 @@ bool ThermostatOperatingState::RequestValue
 		msg->SetInstance( this, _instance );
 		msg->Append( GetNodeId() );
 		msg->Append( 2 );
-		msg->Append( GetCommandClassId() );
+		msg->AppendDuplicateClassId( GetCommandClassId() );
 		msg->Append( ThermostatOperatingStateCmd_Get );
 		msg->Append( GetDriver()->GetTransmitOptions() );
 		GetDriver()->SendMsg( msg, _queue );
@@ -123,15 +211,23 @@ bool ThermostatOperatingState::HandleMsg
 {
 	if( ThermostatOperatingStateCmd_Report == (ThermostatOperatingStateCmd)_data[0] )
 	{
-		// We have received the thermostat operating state from the Z-Wave device
-		if( ValueString* valueString = static_cast<ValueString*>( GetValue( _instance, 0 ) ) )
-		{
-			/* no need bounds checking on c_stateName here, as it can only be 1 Byte anyway */
-			valueString->OnValueRefreshed( c_stateName[_data[1]&0x0f] );
-			valueString->Release();
-			Log::Write( LogLevel_Info, GetNodeId(), "Received thermostat operating state: %s", valueString->GetValue().c_str() );
-		}
-		return true;
+     uint8 mode = (int32)_data[1] & 0x0f;
+
+     //Log::Write(LogLevel_Info, GetNodeId(), "Got mode %d %d %s", mode, m_supportedModes.size(), c_stateName[mode]);
+     
+    if( mode < m_supportedModes.size() )
+    {    
+		  // We have received the thermostat operating state from the Z-Wave device
+		  if( ValueString* valueString = static_cast<ValueString*>( GetValue( _instance, 0 ) ) )
+		  {
+			  /* no need bounds checking on c_stateName here, as it can only be 1 Byte anyway */
+        string name = c_stateName[mode];
+			  valueString->OnValueRefreshed( name );
+			  valueString->Release();
+			  Log::Write( LogLevel_Info, GetNodeId(), "Received thermostat operating state: %s", valueString->GetValue().c_str() );
+		  }
+		  return true;
+    }
 	}
 
 	return false;
@@ -146,9 +242,14 @@ void ThermostatOperatingState::CreateVars
 	uint8 const _instance
 )
 {
+  if( m_supportedModes.empty() )
+  {
+    return;
+  }
+  
 	if( Node* node = GetNodeUnsafe() )
 	{
-	  	node->CreateValueString( ValueID::ValueGenre_User, GetCommandClassId(), _instance, 0, "Operating State", "", true, false, c_stateName[0], 0 );
+	   node->CreateValueString( ValueID::ValueGenre_User, GetCommandClassId(), _instance, 0, "Operating State", "", true, false, c_stateName[0], 0 );
 	}
 }
 

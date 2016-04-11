@@ -44,7 +44,7 @@ namespace OpenZWave
 		string logmsg;
 	} SecurityPayload;
 
-	/* This should probably go into its own file, but its so simple... and only the Security Command Class uses it currently
+	/* This should probably go into its own file, but it's so simple... and only the Security Command Class uses it currently
 	 */
 
 	class Timer {
@@ -79,6 +79,7 @@ namespace OpenZWave
 		void ReadXML(TiXmlElement const* _ccElement);
 		void WriteXML(TiXmlElement* _ccElement);
 		void SendMsg( Msg* _msg );
+    void AdvanceSecurity(void);
 
 	protected:
 		void CreateVars( uint8 const _instance );

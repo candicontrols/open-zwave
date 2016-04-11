@@ -143,7 +143,7 @@ bool SwitchMultilevel::RequestValue
 			msg->SetInstance( this, _instance );
 			msg->Append( GetNodeId() );
 			msg->Append( 2 );
-			msg->Append( GetCommandClassId() );
+			msg->AppendDuplicateClassId( GetCommandClassId() );
 			msg->Append( SwitchMultilevelCmd_Get );
 			msg->Append( GetDriver()->GetTransmitOptions() );
 			GetDriver()->SendMsg( msg, _queue );
@@ -465,7 +465,7 @@ bool SwitchMultilevel::SetLevel
 		}
 
 		msg->Append( 4 );
-		msg->Append( GetCommandClassId() );
+		msg->AppendDuplicateClassId( GetCommandClassId() );
 		msg->Append( SwitchMultilevelCmd_Set );
 		msg->Append( _level );
 		msg->Append( duration );
@@ -473,7 +473,7 @@ bool SwitchMultilevel::SetLevel
 	else
 	{
 		msg->Append( 3 );
-		msg->Append( GetCommandClassId() );
+		msg->AppendDuplicateClassId( GetCommandClassId() );
 		msg->Append( SwitchMultilevelCmd_Set );
 		msg->Append( _level );
 	}
@@ -616,7 +616,7 @@ void SwitchMultilevel::CreateVars
 			}
 			case 1:
 			{
-			  	node->CreateValueByte( ValueID::ValueGenre_User, GetCommandClassId(), _instance, SwitchMultilevelIndex_Level, "Level", "", false, false, 0, 0 );
+				node->CreateValueByte( ValueID::ValueGenre_User, GetCommandClassId(), _instance, SwitchMultilevelIndex_Level, "Level", "", false, false, 0, 0 );
 				node->CreateValueButton( ValueID::ValueGenre_User, GetCommandClassId(), _instance, SwitchMultilevelIndex_Bright, "Bright", 0 );
 				node->CreateValueButton( ValueID::ValueGenre_User, GetCommandClassId(), _instance, SwitchMultilevelIndex_Dim, "Dim", 0 );
 				node->CreateValueBool( ValueID::ValueGenre_System, GetCommandClassId(), _instance, SwitchMultilevelIndex_IgnoreStartLevel, "Ignore Start Level", "", false, false, true, 0 );

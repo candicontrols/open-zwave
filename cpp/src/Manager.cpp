@@ -57,6 +57,8 @@
 #include "value_classes/ValueShort.h"
 #include "value_classes/ValueString.h"
 
+#include "candi_s.h"
+
 using namespace OpenZWave;
 
 Manager* Manager::s_instance = NULL;
@@ -131,6 +133,8 @@ Manager::Manager
 ):
 	m_notificationMutex( new Mutex() )
 {
+	m_batteryMode = false;
+  
 	// Ensure the singleton instance is set
 	s_instance = this;
 
@@ -483,6 +487,27 @@ bool Manager::IsBridgeController
 	Log::Write( LogLevel_Info, "mgr,     IsBridgeController() failed - _homeId %d not found", _homeId );
 	return false;
 }
+
+
+//-----------------------------------------------------------------------------
+// <Manager::FlushPollQueue>
+// 
+//-----------------------------------------------------------------------------
+bool Manager::FlushPollQueue
+(
+  uint32 const _homeId
+)
+{
+  if( Driver* driver = GetDriver( _homeId ) )
+  {
+    driver->FlushPollQueue();
+    return true;
+  }
+
+  Log::Write( LogLevel_Info, "mgr,     FlushPollQueue() failed - _homeId %d not found", _homeId );
+  return false;
+}
+
 
 //-----------------------------------------------------------------------------
 // <Manager::GetLibraryVersion>
@@ -904,6 +929,27 @@ bool Manager::IsNodeSecurityDevice
 
 	return security;
 }
+
+//-----------------------------------------------------------------------------
+// <Manager::GetSecurityState>
+// Get the security state
+//-----------------------------------------------------------------------------
+Node::SecurityState Manager::GetSecurityState
+(
+	uint32 const _homeId,
+	uint8 const _nodeId
+)
+{
+	Node::SecurityState security = Node::SecurityState_NotSupported;
+	if( Driver* driver = GetDriver( _homeId ) )
+	{
+		security = driver->GetSecurityState( _nodeId );
+	}
+	return security;
+}
+
+
+
 
 //-----------------------------------------------------------------------------
 // <Manager::GetNodeMaxBaudRate>
@@ -1335,10 +1381,10 @@ bool Manager::GetNodeClassInformation
 	        // Need to lock and unlock nodes to check this information
 	        driver->LockNodes();
 
-	        if( ( node = driver->GetNodeUnsafe( _nodeId ) ) != NULL )
+	        if( (node = driver->GetNodeUnsafe( _nodeId ) ) != NULL)
 	        {
 			CommandClass *cc;
-			if( node->NodeInfoReceived() && ( ( cc = node->GetCommandClass( _commandClassId ) ) != NULL ) )
+			if( node->NodeInfoReceived() && ( ( cc = node->GetCommandClass(_commandClassId)) != NULL ) )
 			{
 				if( _className )
 				{
@@ -1951,7 +1997,7 @@ bool Manager::GetValueAsRaw
 				{
 					*o_length = value->GetLength();
 					*o_value = new uint8[*o_length];
-					memcpy( *o_value, value->GetValue(), *o_length );
+					memcpy_s( *o_value, *o_length, value->GetValue(), *o_length );
 					value->Release();
 					res = true;
 				} else {
@@ -2571,7 +2617,7 @@ bool Manager::SetValueListSelection
 
 	if( ValueID::ValueType_List == _id.GetType() )
 	{
-		if( Driver* driver = GetDriver( _id.GetHomeId() ) )
+		if( Driver* driver = GetDriver( _id.GetHomeId() ) )		
 		{
 			if( _id.GetNodeId() != driver->GetNodeId() )
 			{
@@ -2737,7 +2783,8 @@ bool Manager::SetValue
 //-----------------------------------------------------------------------------
 bool Manager::RefreshValue
 (
-	ValueID const& _id
+	ValueID const& _id,
+  bool _poll
 )
 {
 	bool bRet = false;	// return value
@@ -2756,7 +2803,7 @@ bool Manager::RefreshValue
         			uint8 index = _id.GetIndex();
 	        		uint8 instance = _id.GetInstance();
 		        	Log::Write( LogLevel_Info, "mgr,     Refreshing node %d: %s index = %d instance = %d (to confirm a reported change)", node->m_nodeId, cc->GetCommandClassName().c_str(), index, instance );
-		        	cc->RequestValue( 0, index, instance, Driver::MsgQueue_Send );
+		        	cc->RequestValue( 0, index, instance, _poll ? Driver::MsgQueue_Poll : Driver::MsgQueue_Send );
         			bRet = true;
             } else {
        				OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to RefreshValue");
@@ -2791,6 +2838,27 @@ void Manager::SetChangeVerified
 		driver->ReleaseNodes();
 	}
 }
+
+
+/*void Manager::SetRefresh
+(
+  ValueID const& _id,
+  bool _refresh
+)
+{
+  if( Driver* driver = GetDriver( _id.GetHomeId() ) )
+  {
+    driver->LockNodes();
+    if( Value* value = driver->GetValue( _id ) )
+    {
+      value->SetDoRefresh( _refresh );
+      value->Release();
+    }
+    driver->ReleaseNodes();
+  }
+}*/
+
+
 
 //-----------------------------------------------------------------------------
 // <Manager::GetChangeVerified>
@@ -3106,12 +3174,13 @@ bool Manager::SetConfigParam
 	uint8 const _nodeId,
 	uint8 const _param,
 	int32 _value,
-	uint8 const _size
+	uint8 const _size,
+	bool const _raw
 )
 {
 	if( Driver* driver = GetDriver( _homeId ) )
 	{
-		return driver->SetConfigParam( _nodeId, _param, _value, _size );
+		return driver->SetConfigParam( _nodeId, _param, _value, _size, _raw );
 	}
 
 	return false;
@@ -3400,7 +3469,7 @@ bool Manager::BeginControllerCommand
 (
 	uint32 const _homeId,
 	Driver::ControllerCommand _command,
-	Driver::pfnControllerCallback_t _callback,				// = NULL
+	Driver::pfnControllerCallback_t _callback,	// = NULL
 	void* _context,								// = NULL
 	bool _highPower,							// = false
 	uint8 _nodeId,								// = 0xff

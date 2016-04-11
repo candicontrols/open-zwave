@@ -81,9 +81,9 @@ namespace OpenZWave
 		bool GetChangeVerified() { return m_verifyChanges; }
 
 		virtual string const GetAsString() const { return ""; }
-		virtual bool SetFromString( string const& _value ) { return false; }
+		virtual bool SetFromString( string const& _value ) { (void)_value; return false; }
 
-		bool Set();							// For the user to change a value in a device
+		bool Set();                                                     // For the user to change a value in a device
 
 		// Helpers
 		static ValueID::ValueGenre GetGenreEnumFromName( char const* _name );

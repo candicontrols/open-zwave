@@ -206,7 +206,7 @@ bool ThermostatFanMode::RequestValue
 			msg->SetInstance( this, _instance );
 			msg->Append( GetNodeId() );
 			msg->Append( 2 );
-			msg->Append( GetCommandClassId() );
+			msg->AppendDuplicateClassId( GetCommandClassId() );
 			msg->Append( ThermostatFanModeCmd_Get );
 			msg->Append( GetDriver()->GetTransmitOptions() );
 			GetDriver()->SendMsg( msg, _queue );
@@ -311,7 +311,7 @@ bool ThermostatFanMode::SetValue
 		msg->SetInstance( this, _value.GetID().GetInstance() );
 		msg->Append( GetNodeId() );
 		msg->Append( 3 );
-		msg->Append( GetCommandClassId() );
+		msg->AppendDuplicateClassId( GetCommandClassId() );
 		msg->Append( ThermostatFanModeCmd_Set );
 		msg->Append( state );
 		msg->Append( GetDriver()->GetTransmitOptions() );

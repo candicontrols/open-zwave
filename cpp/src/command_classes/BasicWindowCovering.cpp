@@ -62,7 +62,7 @@ bool BasicWindowCovering::SetValue
 		ValueButton const* button = static_cast<ValueButton const*>(&_value);
 
 		uint8 action = 0x40;
-		if( button->GetID().GetIndex() )	// Open is index zero, so non-zero is close.
+		if( button && button->GetID().GetIndex() )	// Open is index zero, so non-zero is close.
 		{
 			// Close
 			action = 0;
