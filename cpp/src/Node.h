@@ -33,6 +33,7 @@
 #include <list>
 #include <map>
 #include "Defs.h"
+#include "Group.h"
 #include "value_classes/ValueID.h"
 #include "value_classes/ValueList.h"
 #include "Msg.h"
@@ -85,6 +86,7 @@ namespace OpenZWave
 		friend class Meter;
 		friend class MeterPulse;
 		friend class MultiInstance;
+		friend class MultiInstanceAssociation;
 		friend class NodeNaming;
 		friend class Protection;
 		friend class Security;
@@ -103,6 +105,7 @@ namespace OpenZWave
 		friend class ThermostatSetpoint;
 		friend class Version;
 		friend class WakeUp;
+		friend class ZWavePlusInfo;
 
 	//-----------------------------------------------------------------------------
 	// Construction
@@ -136,12 +139,14 @@ namespace OpenZWave
 			QueryStage_WakeUp,					/**< Start wake up process if a sleeping node */
 			QueryStage_ManufacturerSpecific1,			/**< Retrieve manufacturer name and product ids if ProtocolInfo lets us */
 			QueryStage_NodeInfo,					/**< Retrieve info about supported, controlled command classes */
+			QueryStage_NodePlusInfo,				/**< Retrieve ZWave+ info and update device classes */
 			QueryStage_SecurityReport,				/**< Retrive a list of Command Classes that require Security */
 			QueryStage_ManufacturerSpecific2,			/**< Retrieve manufacturer name and product ids */
 			QueryStage_Versions,					/**< Retrieve version information */
 			QueryStage_Instances,					/**< Retrieve information about multiple command class instances */
 			QueryStage_Static,					/**< Retrieve static information (doesn't change) */
-			QueryStage_Probe1,					/**< Ping a device upon starting with configuration */
+			QueryStage_CacheLoad,					/**< Ping a device upon restarting with cached config for the device */
+			QueryStage_Probe1 = QueryStage_CacheLoad, /** < Depreciated name. /todo Remove in 2.0 timeframe */
 			QueryStage_Associations,				/**< Retrieve information about associations */
 			QueryStage_Neighbors,					/**< Retrieve node neighbor list */
 			QueryStage_Session,					/**< Retrieve session information (changes infrequently) */
@@ -215,26 +220,38 @@ namespace OpenZWave
 		 */
 		bool IsNodeAlive()const{ return m_nodeAlive; }
 
-		/**
-		 *  This function handles a response to the FUNC_ID_ZW_GET_NODE_PROTOCOL_INFO
-		 *  command for this node.  If protocol information has already been retrieved
-		 *  for the node, the function simply returns.  Otherwise, it populates several
-		 *  member variables about the device at this node:
-		 *  - m_routing (whether it is a routing node (capable of passing commands along to other nodes in the network) or not
-		 *  - m_maxBaudRate (the maximum baud rate at which this device can communicate)
-		 *  - m_version (TODO)
-		 *  - m_security (whether device supports security features)
-		 *  - m_listening (device is powered and listening constantly)
-		 *  - m_frequentListening (device can be woken up with a beam)
-		 *  - m_beaming (device is beam capable)
+			/**
+			*  This function handles a response to the FUNC_ID_ZW_GET_NODE_PROTOCOL_INFO
+			*  command for this node.  If protocol information has already been retrieved
+			*  for the node, the function simply returns.  Otherwise, it populates several
+			*  member variables about the device at this node:
+			*  - m_routing (whether it is a routing node (capable of passing commands along to other nodes in the network) or not
+			*  - m_maxBaudRate (the maximum baud rate at which this device can communicate)
+			*  - m_version (TODO)
+			*  - m_security (whether device supports security features)
+			*  - m_listening (device is powered and listening constantly)
+			*  - m_frequentListening (device can be woken up with a beam)
+			*  - m_beaming (device is beam capable)
 		 */
-		void UpdateProtocolInfo( uint8 const* _data );
-		void UpdateNodeInfo( uint8 const* _data, uint8 const _length, bool _security );
+			void UpdateProtocolInfo( uint8 const* _data );
+			/**
+			 * this function is called when the Node is added via a AddNode request. the ProtocolInfo field contains the
+			 * devices classes and the CommandClasses that the node supports, so we can build a pretty good Node out of that
+			 * info.
+			 * @param _protocolInfo Byte 0 - Basic Device Class Byte 1 - Generic Device Class, Byte 2 - Specific Device Classes Remaining Bytes - Supported Command Classes
+			 * @param _length lenght of the _protocolInfo field.
+			 */
+			void SetProtocolInfo(uint8 const* _protocolInfo, uint8 const _length);
+			void UpdateNodeInfo( uint8 const* _data, uint8 const _length );
 
-		bool ProtocolInfoReceived()const{ return m_protocolInfoReceived; }
-		bool NodeInfoReceived()const{ return m_nodeInfoReceived; }
+			bool ProtocolInfoReceived()const{ return m_protocolInfoReceived; }
+			bool NodeInfoReceived()const{ return m_nodeInfoReceived; }
+			bool IsNodeZWavePlus()const{ return m_nodePlusInfoReceived; }
 
-		bool AllQueriesCompleted()const{ return( QueryStage_Complete == m_queryStage ); }
+			bool AllQueriesCompleted()const{ return( QueryStage_Complete == m_queryStage ); }
+
+			void SetNodePlusInfoReceived(const bool _received){ m_nodePlusInfoReceived = _received; }
+
     /**
      * Handle dead node detection tracking.
      * Use this routine to set state of nodes.
@@ -250,9 +267,12 @@ namespace OpenZWave
 		bool		m_queryConfiguration;
 		uint8		m_queryRetries;
 		bool		m_protocolInfoReceived;
+		bool		m_basicprotocolInfoReceived;
 		bool		m_nodeInfoReceived;
+		bool		m_nodePlusInfoReceived;
 		bool		m_manufacturerSpecificClassReceived;
 		bool		m_nodeInfoSupported;
+		bool		m_refreshonNodeInfoFrame;
 		bool		m_nodeAlive;
 
 	//-----------------------------------------------------------------------------
@@ -305,11 +325,11 @@ namespace OpenZWave
 		uint32 GetNeighbors( uint8** o_associations );
 		bool IsController()const{ return ( m_basic == 0x01 || m_basic == 0x02 ) && ( m_generic == 0x01 || m_generic == 0x02 ); }
 		void SetSecurityState(SecurityState _state);
-		SecurityState GetSecurityState() { return m_securityState; }
+		//SecurityState GetSecurityState() { return m_securityState; }
 		bool IsAddingNode() const { return m_addingNode; }	/* These three *AddingNode functions are used to tell if we this node is just being discovered. Currently used by the Security CC to initiate the Network Key Exchange */
 		void SetAddingNode() { m_addingNode = true; }
 		void ClearAddingNode() { m_addingNode = false; }
-
+		bool IsNodeReset();
 	private:
 		bool		m_listening;
 		bool		m_frequentListening;
@@ -318,7 +338,6 @@ namespace OpenZWave
 		uint32		m_maxBaudRate;
 		uint8		m_version;
 		bool		m_security;
-		SecurityState 	m_securityState;
 		uint32		m_homeId;
 		uint8		m_nodeId;
 		uint8		m_basic;		//*< Basic device class (0x01-Controller, 0x02-Static Controller, 0x03-Slave, 0x04-Routing Slave
@@ -342,49 +361,64 @@ namespace OpenZWave
 		string GetNodeName()const{ return m_nodeName; }
 		string GetLocation()const{ return m_location; }
 
-		string GetManufacturerId()const{ return m_manufacturerId; }
-		string GetProductType()const{ return m_productType; }
-		string GetProductId()const{ return m_productId; }
-
+//			string GetManufacturerId()const{ return std::to_string(m_manufacturerId); }
+			uint16 GetManufacturerId()const{ return m_manufacturerId; }
+//			string GetProductType()const{ return string(m_productType); }
+			uint16 GetProductType()const{ return m_productType; }
+//			string GetProductId()const{ return string(m_productId); }
+			uint16 GetProductId()const{ return m_productId; }
+			
 		void SetManufacturerName( string const& _manufacturerName ){ m_manufacturerName = _manufacturerName; }
 		void SetProductName( string const& _productName ){ m_productName = _productName; }
 		void SetNodeName( string const& _nodeName );
 		void SetLocation( string const& _location );
 
-		void SetManufacturerId( string const& _manufacturerId ){ m_manufacturerId = _manufacturerId; }
-		void SetProductType( string const& _productType ){ m_productType = _productType; }
-		void SetProductId( string const& _productId ){ m_productId = _productId; }
+			void SetManufacturerId( uint16 const& _manufacturerId ){ m_manufacturerId = _manufacturerId; }
+			void SetProductType( uint16 const& _productType ){ m_productType = _productType; }
+			void SetProductId( uint16 const& _productId ){ m_productId = _productId; }
 
-		string		m_manufacturerName;
-		string		m_productName;
-		string		m_nodeName;
-		string		m_location;
+			string		m_manufacturerName;
+			string		m_productName;
+			string		m_nodeName;
+			string		m_location;
 
-		string		m_manufacturerId;
-		string		m_productType;
-		string		m_productId;
+			uint16		m_manufacturerId;
+			uint16		m_productType;
+			uint16		m_productId;
 
-	//-----------------------------------------------------------------------------
-	// Command Classes
-	//-----------------------------------------------------------------------------
-	public:
-		/**
-		 * This function retrieves a pointer to the requested command class object (if supported by this node).
-		 * \param _commandClassId Class ID (a single byte value) identifying the command class requested.
-		 * \return Pointer to the requested CommandClass object if supported, otherwise NULL.
-		 * \see CommandClass, m_commandClassMap
-		 */
-		CommandClass* GetCommandClass( uint8 const _commandClassId )const;
-		void ApplicationCommandHandler( uint8 const* _data );
+			// Z-Wave+ info
+			uint16 GetDeviceType() const { return m_deviceType; }
+			string GetDeviceTypeString();
+			uint8 GetRoleType() const { return m_role; }
+			string GetRoleTypeString();
+			uint8 GetNodeType() const { return m_nodeType; }
+			string GetNodeTypeString();
 
-		/**
-		 * This function sets up Secured Command Classes. It iterates over the existing command classes marking them
-		 * as Secured if they exist, and if they don't, it creates new Command Classes and sets them up as Secured
-		 * @param _data a list of Command Classes that are Secured by the Device
-		 * @param _length the length of the _data string
-		 */
+			uint16 m_deviceType;
+			uint8 m_role;
+			uint8 m_nodeType;
+
+		//-----------------------------------------------------------------------------
+		// Command Classes
+		//-----------------------------------------------------------------------------
+		public:
+			/**
+			* This function retrieves a pointer to the requested command class object (if supported by this node).
+			* \param _commandClassId Class ID (a single byte value) identifying the command class requested.
+			* \return Pointer to the requested CommandClass object if supported, otherwise NULL.
+			* \see CommandClass, m_commandClassMap
+			*/
+			CommandClass* GetCommandClass( uint8 const _commandClassId )const;
+			void ApplicationCommandHandler( uint8 const* _data, bool encrypted );
+
+			/**
+			 * This function sets up Secured Command Classes. It iterates over the existing command classes marking them
+			 * as Secured if they exist, and if they don't, it creates new Command Classes and sets them up as Secured
+			* @param _data a list of Command Classes that are Secured by the Device
+			* @param _length the length of the _data string
+			*/
 		void SetSecuredClasses( uint8 const* _data, uint8 const _length );
-
+		void SetSecured(bool secure);
 	private:
 		/**
 		 * Creates the specified command class object and adds it to the node (via the
@@ -409,7 +443,7 @@ namespace OpenZWave
 		void WriteXML( TiXmlElement* _nodeElement );
 
 		map<uint8,CommandClass*>		m_commandClassMap;	/**< Map of command class ids and pointers to associated command class objects */
-
+		bool							m_secured; /**< Is this Node added Securely */
 	//-----------------------------------------------------------------------------
 	// Basic commands (helpers that go through the basic command class)
 	//-----------------------------------------------------------------------------
@@ -474,13 +508,14 @@ namespace OpenZWave
 	//-----------------------------------------------------------------------------
 	private:
 		// The public interface is provided via the wrappers in the Manager class
-		uint8 GetNumGroups();
-		uint32 GetAssociations( uint8 const _groupIdx, uint8** o_associations );
-		uint8 GetMaxAssociations( uint8 const _groupIdx );
-		string GetGroupLabel( uint8 const _groupIdx );
-		void AddAssociation( uint8 const _groupIdx, uint8 const _targetNodeId );
-		void RemoveAssociation( uint8 const _groupIdx, uint8 const _targetNodeId );
-		void AutoAssociate();
+			uint8 GetNumGroups();
+			uint32 GetAssociations( uint8 const _groupIdx, uint8** o_associations );
+			uint32 GetAssociations( uint8 const _groupIdx, InstanceAssociation** o_associations );
+			uint8 GetMaxAssociations( uint8 const _groupIdx );
+			string GetGroupLabel( uint8 const _groupIdx );
+			void AddAssociation( uint8 const _groupIdx, uint8 const _targetNodeId, uint8 const _instance = 0x00 );
+			void RemoveAssociation( uint8 const _groupIdx, uint8 const _targetNodeId, uint8 const _instance = 0x00 );
+			void AutoAssociate();
 
 		// The following methods are not exposed
 		Group* GetGroup( uint8 const _groupIdx );							// Get a pointer to a Group object.  This must only be called while holding the node Lock.
@@ -524,7 +559,8 @@ namespace OpenZWave
 		};
 
 
-		bool SetDeviceClasses( uint8 const _basic, uint8 const _generic, uint8 const _specific, bool _mandatory );	// Set the device class data for the node
+		bool SetDeviceClasses( uint8 const _basic, uint8 const _generic, uint8 const _specific);	// Set the device class data for the node
+		bool SetPlusDeviceClasses( uint8 const _role, uint8 const _nodeType, uint16 const _deviceType );	// Set the device class data for the node based on the Zwave+ info report
 		bool AddMandatoryCommandClasses( uint8 const* _commandClasses );							// Add mandatory command classes as specified in the device_classes.xml to the node.
 		void ReadDeviceClasses();																	// Read the static device class data from the device_classes.xml file
 		string GetEndPointDeviceClassLabel( uint8 const _generic, uint8 const _specific );
@@ -532,6 +568,10 @@ namespace OpenZWave
 		static bool								s_deviceClassesLoaded;		// True if the xml file has alreayd been loaded
 		static map<uint8,string>				s_basicDeviceClasses;		// Map of basic device classes.
 		static map<uint8,GenericDeviceClass*>	s_genericDeviceClasses;		// Map of generic device classes.
+		static map<uint8,DeviceClass*> 			s_roleDeviceClasses;		// Map of Zwave+ role device classes.
+		static map<uint16,DeviceClass*> 		s_deviceTypeClasses;		// Map of Zwave+ device type device classes.
+		static map<uint8, DeviceClass*>			s_nodeTypes;				// Map of ZWave+ Node Types
+
 
 	//-----------------------------------------------------------------------------
 	//	Statistics
@@ -581,6 +621,18 @@ namespace OpenZWave
 		uint8 m_quality;				// Node quality measure
 		uint8 m_lastReceivedMessage[254];		// Place to hold last received message
 		uint8 m_errors;					// Count errors for dead node detection
+
+			//-----------------------------------------------------------------------------
+			//	Encryption Related
+			//-----------------------------------------------------------------------------
+			public:
+
+			uint8 *GenerateNonceKey();
+			uint8 *GetNonceKey(uint32 nonceid);
+
+			private:
+			uint8 m_lastnonce;
+			uint8 m_nonces[8][8];
 	};
 	
 } //namespace OpenZWave

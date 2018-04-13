@@ -136,7 +136,7 @@ bool Stream::Put
 	uint32 _size
 )
 {
-	if( (m_bufferSize-m_dataSize) < _size )
+	if( (m_bufferSize - m_dataSize) < _size )
 	{
 		// There is not enough space left in the buffer for the data
 		Log::Write( LogLevel_Error, "ERROR: Not enough space in stream buffer");
@@ -149,30 +149,32 @@ bool Stream::Put
 		// We will have to wrap around
 		uint32 block1 = m_bufferSize - m_head;
 		uint32 block2 = _size - block1;
-
-		memcpy_s( &m_buffer[m_head], block1, _buffer, block1 );
+		// calculate the pointer once
+		uint8*	end = &m_buffer[m_head];
+		memcpy_s(end , block1, _buffer, block1 );
 		memcpy_s( m_buffer, block2, &_buffer[block1], block2 );
+
 		m_head = block2;
-		LogData( m_buffer + m_head - block1, block1, "      Read (controller->buffer):  ");
+		LogData( end, block1, "      Read (controller->buffer):  ");
 		LogData( m_buffer, block2, "      Read (controller->buffer):  ");
 	}
 	else
 	{
 		// There is enough space before we reach the end of the buffer
-		memcpy_s( &m_buffer[m_head], _size, _buffer, _size );
+		uint8* end = &m_buffer[m_head];
+		memcpy_s(end , _size, _buffer, _size );
 		m_head += _size;
-		LogData(m_buffer+m_head-_size, _size, "      Read (controller->buffer):  ");
+		LogData(end, _size, "      Read (controller->buffer):  ");
 	}
-
 	m_dataSize += _size;
-
+  // done writing to the buffer unlock
+	m_mutex->Unlock();
 	if( IsSignalled() )
 	{
 		// We now have more data than we are waiting for, so notify the watchers
 		Notify();
 	}
 
-	m_mutex->Unlock();
 	return true;
 }
 

@@ -64,6 +64,7 @@ namespace OpenZWave
 		SerialController*	m_owner;
 		int			m_hSerialController;
 		Thread*			m_pThread;
+    bool m_exiting;
 
 		static void SerialReadThreadEntryPoint( Event* _exitEvent, void* _content );
 	};

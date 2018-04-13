@@ -33,11 +33,13 @@
 #include <list>
 
 #include "Defs.h"
+#include "Group.h"
 #include "value_classes/ValueID.h"
 #include "Node.h"
 #include "platform/Event.h"
 #include "platform/Mutex.h"
 #include "platform/TimeStamp.h"
+#include "aes/aescpp.h"
 
 namespace OpenZWave
 {
@@ -66,11 +68,13 @@ namespace OpenZWave
 		friend class Association;
 		friend class Basic;
 		friend class ManufacturerSpecific;
+		friend class MultiInstanceAssociation;
 		friend class NodeNaming;
 		friend class NoOperation;
 		friend class SceneActivation;
 		friend class WakeUp;
 		friend class Security;
+		friend class Msg;
 
 	//-----------------------------------------------------------------------------
 	//	Controller Interfaces
@@ -146,6 +150,7 @@ namespace OpenZWave
 		void RemoveQueues( uint8 const _nodeId );
 		
 		Thread*					m_driverThread;			/**< Thread for reading from the Z-Wave controller, and for creating and managing the other threads for sending, polling etc. */
+		Mutex*					m_initMutex;            /**< Mutex to ensure proper ordering of initialization/deinitialization */
 		bool					m_exit;					/**< Flag that is set when the application is exiting. */
 		bool					m_init;					/**< Set to true once the driver has been initialised */
 		bool					m_awakeNodesQueried;	/**< Set to true once the driver has polled all awake nodes */
@@ -191,7 +196,7 @@ namespace OpenZWave
 
 
 		uint32 GetHomeId()const{ return m_homeId; }
-		uint8 GetNodeId()const{ return m_nodeId; }
+		uint8 GetControllerNodeId()const{ return m_Controller_nodeId; }
 		uint8 GetSUCNodeId()const{ return m_SUCNodeId; }
 		uint16 GetManufacturerId()const{ return m_manufacturerId; }
 		uint16 GetProductType()const{ return m_productType; }
@@ -233,11 +238,11 @@ namespace OpenZWave
 		/**
 		 *  Lock the nodes so no other thread can modify them.
 		 */
-		void LockNodes();
+		//void LockNodes();
 		/**
 		 *  Release the lock on the nodes so other threads can modify them.
 		 */
-		void ReleaseNodes();
+		//void ReleaseNodes();
 
 		ControllerInterface     m_controllerInterfaceType;                  // Specifies the controller's hardware interface
 		string					m_controllerPath;							// name or path used to open the controller hardware.
@@ -257,7 +262,7 @@ namespace OpenZWave
 		uint8					m_initVersion;								// Version of the Serial API used by the controller.
 		uint8					m_initCaps;									// Set of flags indicating the serial API capabilities (See IsSlave, HasTimerSupport, IsPrimaryController and IsStaticUpdateController above).
 		uint8					m_controllerCaps;							// Set of flags indicating the controller's capabilities (See IsInclusionController above).
-		uint8					m_nodeId;									// Z-Wave Controller's own node ID.
+		uint8					m_Controller_nodeId;									// Z-Wave Controller's own node ID.
 		Node*					m_nodes[256];								// Array containing all the node objects.
 		Mutex*					m_nodeMutex;								// Serializes access to node data
 
@@ -301,40 +306,41 @@ namespace OpenZWave
 		bool HandleAssignReturnRouteResponse( uint8* _data );
 		bool HandleDeleteReturnRouteResponse( uint8* _data );
 		void HandleSendNodeInformationRequest( uint8* _data );
-    void HandleSendDataResponse( uint8* _data, bool _replication );
-    bool HandleNetworkUpdateResponse( uint8* _data );
-    void HandleGetRoutingInfoResponse( uint8* _data );
+		void HandleSendDataResponse( uint8* _data, bool _replication );
+		bool HandleNetworkUpdateResponse( uint8* _data );
+		void HandleGetRoutingInfoResponse( uint8* _data );
 
-    void HandleSendDataRequest( uint8* _data, bool _replication );
-    void HandleAddNodeToNetworkRequest( uint8* _data );
-    void HandleCreateNewPrimaryRequest( uint8* _data );
-    void HandleControllerChangeRequest( uint8* _data );
-    void HandleSetLearnModeRequest( uint8* _data );
-    void HandleRemoveFailedNodeRequest( uint8* _data );
-    void HandleReplaceFailedNodeRequest( uint8* _data );
-    void HandleRemoveNodeFromNetworkRequest( uint8* _data );
-    void HandleApplicationCommandHandlerRequest( uint8* _data );
-    void HandlePromiscuousApplicationCommandHandlerRequest( uint8* _data );
-    void HandleAssignReturnRouteRequest( uint8* _data );
-    void HandleDeleteReturnRouteRequest( uint8* _data );
-    void HandleNodeNeighborUpdateRequest( uint8* _data );
-    void HandleNetworkUpdateRequest( uint8* _data );
-    bool HandleApplicationUpdateRequest( uint8* _data );
-    bool HandleRfPowerLevelSetResponse( uint8* _data );
-    bool HandleSerialApiSetTimeoutsResponse( uint8* _data );
-    bool HandleMemoryGetByteResponse( uint8* _data );
-    bool HandleReadMemoryResponse( uint8* _data );
-    void HandleGetVirtualNodesResponse( uint8* _data );
-    bool HandleSetSlaveLearnModeResponse( uint8* _data );
-    void HandleSetSlaveLearnModeRequest( uint8* _data );
-    bool HandleSendSlaveNodeInfoResponse( uint8* _data );
-    void HandleSendSlaveNodeInfoRequest( uint8* _data );
-    void HandleApplicationSlaveCommandRequest( uint8* _data );
+		void HandleSendDataRequest( uint8* _data, bool _replication );
+		void HandleAddNodeToNetworkRequest( uint8* _data );
+		void HandleCreateNewPrimaryRequest( uint8* _data );
+		void HandleControllerChangeRequest( uint8* _data );
+		void HandleSetLearnModeRequest( uint8* _data );
+		void HandleRemoveFailedNodeRequest( uint8* _data );
+		void HandleReplaceFailedNodeRequest( uint8* _data );
+		void HandleRemoveNodeFromNetworkRequest( uint8* _data );
+		void HandleApplicationCommandHandlerRequest( uint8* _data, bool encrypted );
+		void HandlePromiscuousApplicationCommandHandlerRequest( uint8* _data );
+		void HandleAssignReturnRouteRequest( uint8* _data );
+		void HandleDeleteReturnRouteRequest( uint8* _data );
+		void HandleNodeNeighborUpdateRequest( uint8* _data );
+		void HandleNetworkUpdateRequest( uint8* _data );
+		bool HandleApplicationUpdateRequest( uint8* _data );
+		bool HandleRfPowerLevelSetResponse( uint8* _data );
+		bool HandleSerialApiSetTimeoutsResponse( uint8* _data );
+		bool HandleMemoryGetByteResponse( uint8* _data );
+		bool HandleReadMemoryResponse( uint8* _data );
+		void HandleGetVirtualNodesResponse( uint8* _data );
+		bool HandleSetSlaveLearnModeResponse( uint8* _data );
+		void HandleSetSlaveLearnModeRequest( uint8* _data );
+		bool HandleSendSlaveNodeInfoResponse( uint8* _data );
+		void HandleSendSlaveNodeInfoRequest( uint8* _data );
+		void HandleApplicationSlaveCommandRequest( uint8* _data );
 		void HandleSerialAPIResetRequest( uint8* _data );
-    
-    void CommonAddNodeStatusRequestHandler( uint8 _funcId, uint8* _data );
+
+		void CommonAddNodeStatusRequestHandler( uint8 _funcId, uint8* _data );
 
 		bool					m_waitingForAck;							// True when we are waiting for an ACK from the dongle
+		bool					m_waitingForNetworkUpdate;   // Waiting for completion of Neighbor update
 		uint8					m_expectedCallbackId;						// If non-zero, we wait for a message with this callback Id
 		uint8					m_expectedReply;							// If non-zero, we wait for a message with this function Id
 		uint8					m_expectedCommandClassId;					// If the expected reply is FUNC_ID_APPLICATION_COMMAND_HANDLER, this value stores the command class we're waiting to hear from
@@ -379,9 +385,12 @@ OPENZWAVE_EXPORT_WARNINGS_ON
 		 *  stages--Node::QueryStage_None).  This function will send Notification::Type_NodeAdded
 		 *  and Notification::Type_NodeRemoved messages to identify these modifications.
 		 *  \param _nodeId The node ID of the node to create and query.
+		 *  \param newNode If this is a new Node added to the network, or we are just creating when we reload.
+		 *  \param _protocolInfo if this is called via a AddNode command, then this would be the Device Classes, and CommandClass list
+		 *  \param _length The length of the _protocolInfo field
 		 *  \see Notification::Type_NodeAdded, Notification::Type_NodeRemoved, Node::QueryStage_None,
 		 */
-		void InitNode( uint8 const _nodeId, bool newNode = false );
+		void InitNode( uint8 const _nodeId, bool newNode = false, bool secure = false, uint8 const *_protocolInfo = NULL, uint8 const _length = 0);
 
 		void InitAllNodes();												// Delete all nodes and fetch the data from the Z-Wave network again.
 
@@ -390,7 +399,7 @@ OPENZWAVE_EXPORT_WARNINGS_ON
 		bool IsNodeBeamingDevice( uint8 const _nodeId );
 		bool IsNodeRoutingDevice( uint8 const _nodeId );
 		bool IsNodeSecurityDevice( uint8 const _nodeId );
-		Node::SecurityState GetSecurityState( uint8 const _nodeId );
+		//Node::SecurityState GetSecurityState( uint8 const _nodeId );
 		uint32 GetNodeMaxBaudRate( uint8 const _nodeId );
 		uint8 GetNodeVersion( uint8 const _nodeId );
 		uint8 GetNodeSecurity( uint8 const _nodeId );
@@ -404,10 +413,17 @@ OPENZWAVE_EXPORT_WARNINGS_ON
 		string GetNodeProductName( uint8 const _nodeId );
 		string GetNodeName( uint8 const _nodeId );
 		string GetNodeLocation( uint8 const _nodeId );
+		uint16 GetNodeDeviceType( uint8 const _nodeId );
+		string GetNodeDeviceTypeString( uint8 const _nodeId );
+		uint8 GetNodeRole( uint8 const _nodeId );
+		string GetNodeRoleString( uint8 const _nodeId );
+		uint8 GetNodePlusType( uint8 const _nodeId );
+		string GetNodePlusTypeString ( uint8 const _nodeId );
+		bool IsNodeZWavePlus( uint8 const _nodeId );
 
-		string GetNodeManufacturerId( uint8 const _nodeId );
-		string GetNodeProductType( uint8 const _nodeId );
-		string GetNodeProductId( uint8 const _nodeId );
+		uint16 GetNodeManufacturerId( uint8 const _nodeId );
+		uint16 GetNodeProductType( uint8 const _nodeId );
+		uint16 GetNodeProductId( uint8 const _nodeId );
 		void SetNodeManufacturerName( uint8 const _nodeId, string const& _manufacturerName );
 		void SetNodeProductName( uint8 const _nodeId, string const& _productName );
 		void SetNodeName( uint8 const _nodeId, string const& _nodeName );
@@ -529,49 +545,14 @@ OPENZWAVE_EXPORT_WARNINGS_ON
       bool          m_controllerAdded;
       uint8         m_controllerCommandNode;
       uint8         m_controllerCommandArg;
+			uint8					m_controllerDeviceProtocolInfo[254];
+			uint8 					m_controllerDeviceProtocolInfoLength;
     };
 
     ControllerCommandItem*      m_currentControllerCommand;
 
 	  void DoControllerCommand();
-		void UpdateControllerState( ControllerState const _state, ControllerError const _error = ControllerError_None )
-		{
-			if( m_currentControllerCommand != NULL )
-			{
-				if( _state != m_currentControllerCommand->m_controllerState )
-				{
-					m_currentControllerCommand->m_controllerStateChanged = true;
-					m_currentControllerCommand->m_controllerState = _state;
-					switch( _state )
-					{
-						case ControllerState_Error:
-						case ControllerState_Cancel:
-						case ControllerState_Failed:
-						case ControllerState_Sleeping:
-						case ControllerState_NodeFailed:
-						case ControllerState_NodeOK:
-						case ControllerState_Completed:
-            case ControllerState_CompletedNoChange:
-						{
-							m_currentControllerCommand->m_controllerCommandDone = true;
-							m_sendMutex->Lock();
-							m_queueEvent[MsgQueue_Controller]->Set();
-							m_sendMutex->Unlock();
-							break;
-						}
-						default:
-						{
-							break;
-						}
-					}
-
-				}
-				if( _error != ControllerError_None )
-				{
-					m_currentControllerCommand->m_controllerReturnError = _error;
-				}
-			}
-		}
+		void UpdateControllerState( ControllerState const _state, ControllerError const _error = ControllerError_None );
 
 		uint8					m_SUCNodeId;
 		
@@ -775,10 +756,12 @@ OPENZWAVE_EXPORT_WARNINGS_OFF
 		// The public interface is provided via the wrappers in the Manager class
 		uint8 GetNumGroups( uint8 const _nodeId );
 		uint32 GetAssociations( uint8 const _nodeId, uint8 const _groupIdx, uint8** o_associations );
+		uint32 GetAssociations( uint8 const _nodeId, uint8 const _groupIdx, InstanceAssociation** o_associations );
 		uint8 GetMaxAssociations( uint8 const _nodeId, uint8 const _groupIdx );
 		string GetGroupLabel( uint8 const _nodeId, uint8 const _groupIdx );
-		void AddAssociation( uint8 const _nodeId, uint8 const _groupIdx, uint8 const _targetNodeId );
-		void RemoveAssociation( uint8 const _nodeId, uint8 const _groupIdx, uint8 const _targetNodeId );
+		void AddAssociation( uint8 const _nodeId, uint8 const _groupIdx, uint8 const _targetNodeId, uint8 const _instance = 0x00 );
+		void RemoveAssociation( uint8 const _nodeId, uint8 const _groupIdx, uint8 const _targetNodeId, uint8 const _instance = 0x00 );
+
 
 	//-----------------------------------------------------------------------------
 	//	Notifications
@@ -855,10 +838,24 @@ OPENZWAVE_EXPORT_WARNINGS_ON
 	//-----------------------------------------------------------------------------
 	//	Security Command Class Related (Version 1.1)
 	//-----------------------------------------------------------------------------
-	private:
-		uint8 *GetNetworkKey();
-	};
+	public:
+		aes_encrypt_ctx *GetAuthKey();
+		aes_encrypt_ctx *GetEncKey();
+		bool isNetworkKeySet();
 
+	private:
+		bool initNetworkKeys(bool newnode);
+		uint8 *GetNetworkKey();
+		bool SendEncryptedMessage();
+		bool SendNonceRequest(string logmsg);
+		void SendNonceKey(uint8 nodeId, uint8 *nonce);
+		aes_encrypt_ctx *AuthKey;
+		aes_encrypt_ctx *EncryptKey;
+		uint8 m_nonceReportSent;
+		uint8 m_nonceReportSentAttempt;
+		bool m_inclusionkeySet;
+
+	};
 } // namespace OpenZWave
 
 #endif // _Driver_H

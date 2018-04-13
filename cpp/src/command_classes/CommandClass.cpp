@@ -65,6 +65,7 @@ CommandClass::CommandClass
 	m_getSupported( true ),
 	m_isSecured( false ),
 	m_SecureSupport( true ),
+	m_inNIF(false),
 	m_staticRequests( 0 ),
 	m_sentCnt( 0 ),
 	m_receivedCnt( 0 )
@@ -265,6 +266,13 @@ void CommandClass::ReadXML
 	{
 		m_isSecured = !strcmp( str, "true" );
 	}
+	str = _ccElement->Attribute( "innif" );
+	if( str )
+	{
+		m_inNIF = !strcmp( str, "true" );
+	}
+
+
 	// Setting the instance count will create all the values.
 	SetInstances( instances );
 
@@ -461,11 +469,14 @@ void CommandClass::WriteXML
 		_ccElement->SetAttribute( "getsupported", "false" );
 	}
 	if ( m_isSecured )
-        {
-                _ccElement->SetAttribute( "issecured", "true" );
-        }
-
-
+	{
+		_ccElement->SetAttribute( "issecured", "true" );
+	}
+	if ( m_inNIF )
+	{
+		_ccElement->SetAttribute( "innif", "true" );
+	}
+	
 	// Write out the instances
 	for( Bitfield::Iterator it = m_instances.Begin(); it != m_instances.End(); ++ it )
 	{
@@ -751,7 +762,7 @@ void CommandClass::UpdateMappedClass
 		{
 			CommandClass* cc = node->GetCommandClass( _classId );
       Log::Write(LogLevel_Info, GetNodeId(), "%zd %d", cc, node->GetCurrentQueryStage());
-			if(/*(node->IsListeningDevice() ||  node->GetCurrentQueryStage() == Node::QueryStage_Complete) && */cc != NULL )
+			if(node->GetCurrentQueryStage() == Node::QueryStage_Complete && cc != NULL )
 			{
      //   Log::Write(LogLevel_Info, GetNodeId(), "Really update mapped class");
 				cc->SetValueBasic( _instance, _level );

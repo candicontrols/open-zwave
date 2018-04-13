@@ -63,11 +63,11 @@ namespace OpenZWave
 		 */
 		void Unlock();
 
-	protected:
 		/**
 		 * Used by the Wait class to test whether the mutex is free.
 		 */
 		virtual bool IsSignalled();
+	protected:
 
 		/**
 		 * Destructor.

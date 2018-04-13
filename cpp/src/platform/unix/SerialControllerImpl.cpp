@@ -28,9 +28,11 @@
 #include <unistd.h>
 #include <pthread.h>
 #include "Defs.h"
+#include "Manager.h"
 #include "platform/Thread.h"
 #include "platform/Event.h"
 #include "SerialControllerImpl.h"
+#include "Notification.h"
 #include "platform/Log.h"
 
 #include <string.h>
@@ -48,7 +50,8 @@ SerialControllerImpl::SerialControllerImpl
 	SerialController* _owner
 ):
 	m_owner( _owner ),
-	m_hSerialController( -1 )
+	m_hSerialController( -1 ),
+	m_exiting( false )
 {
 }
 
@@ -96,6 +99,7 @@ void SerialControllerImpl::Close
 ( 
 )
 {
+  m_exiting = true;
 	if( m_pThread )
 	{
 		m_pThread->Stop();
@@ -132,8 +136,8 @@ void SerialControllerImpl::ReadThreadProc
 	Event* _exitEvent
 )
 {  
-	uint32 attempts = 0;
-	while( true )
+	//uint32 attempts = 0;
+	while( !m_exiting )
 	{
 		// Init must have been called successfully during Open, so we
 		// don't do it again until the end of the loop
@@ -144,10 +148,17 @@ void SerialControllerImpl::ReadThreadProc
 			Read();
 
 			// Reset the attempts, so we get a rapid retry for temporary errors
-			attempts = 0;
+			//attempts = 0;
 		}
 
-		if( attempts < 25 )		
+		if( Wait::Single( _exitEvent, 5000 ) >= 0 )
+      {
+        Log::Write( LogLevel_Info, "ReadThreadProc Exit signalled");
+        // Exit signalled.
+        break;
+      }
+
+		/*if( attempts < 25 )
 		{
 			// Retry every 5 seconds for the first two minutes...
 			if( Wait::Single( _exitEvent, 5000 ) >= 0 )
@@ -164,10 +175,12 @@ void SerialControllerImpl::ReadThreadProc
 				// Exit signalled.
 				break;
 			}
-		}
+		}*/
 
-		Init( ++attempts );
+		//Init( ++attempts );
+    //break;
 	}
+	Log::Write( LogLevel_Info, "ReadThreadProc exiting");
 }
 
 //-----------------------------------------------------------------------------
@@ -310,6 +323,9 @@ SerialOpenFailure:
 	return false;
 }
 
+#include <stdlib.h>
+
+
 //-----------------------------------------------------------------------------
 // <SerialControllerImpl::Read>
 // Read data from the serial port
@@ -320,14 +336,34 @@ void SerialControllerImpl::Read
 {
 	uint8 buffer[256];
 
-	while( 1 )
+  int zerocount = 0;
+  
+	while( !m_exiting )
         {
 		int32 bytesRead;
 		int err;
 
 		do
-		{
+		{      
 			bytesRead = read( m_hSerialController, buffer, sizeof(buffer) );
+      if (bytesRead == 0) {
+        zerocount++;
+        if (zerocount > 1) usleep(10000);
+          //Log::Write( LogLevel_Error, "Zero count: %d", zerocount);
+        if (zerocount > 100) {
+          
+          Log::Write( LogLevel_Error, "Serial port not responding.  Notifying Manager");
+          //Notification* notification = new Notification( Notification::Type_SecurityChanged );
+          //Manager::GetDriver()->QueueNotification( notification );
+          Manager::Get()->SerialFailure(m_owner->m_serialControllerName);
+          sleep(5);
+          return;
+        }
+        
+      } else {
+//        Log::Write( LogLevel_Error, "read: %d", bytesRead);
+        zerocount = 0;
+      }
 			if( bytesRead > 0 )
 				m_owner->Put( buffer, bytesRead );      
 		} while( bytesRead > 0 );

@@ -61,9 +61,7 @@ Basic::Basic
 	CommandClass( _homeId, _nodeId ),
 	m_mapping( 0 ),
 	m_ignoreMapping( false ),
-	//m_setAsReport( false )
-	m_setAsReport( true ) // Upstream this is true, but because of the possible loss of info about battery devices/sensors, make this 
-                        // always true.  This is always what we want in Zuul in any case. 
+	m_setAsReport( false )
 {
 }
 
@@ -96,7 +94,7 @@ void Basic::ReadXML
 	str = _ccElement->Attribute("setasreport");
 	if( str )
 	{
-		//m_setAsReport = !strcmp( str, "true");
+		m_setAsReport = !strcmp( str, "true");
 	}
 }
 
@@ -142,7 +140,8 @@ bool Basic::RequestState
 {
 	if( _requestFlags & RequestFlag_Dynamic )
 	{
-		return RequestValue( _requestFlags, 0, _instance, _queue );
+		if ( (m_ignoreMapping || (!m_ignoreMapping && m_mapping == 0)))
+			return RequestValue( _requestFlags, 0, _instance, _queue );
 	}
 	return false;
 }
@@ -199,6 +198,8 @@ bool Basic::HandleMsg
 		{
 			value->OnValueRefreshed( _data[1] );
 			value->Release();
+		} else {
+			Log::Write(LogLevel_Warning, GetNodeId(), "No Valid Mapping for Basic Command Class and No ValueID Exported. Error?");
 		}
 		return true;
 	}
@@ -210,12 +211,23 @@ bool Basic::HandleMsg
 			Log::Write( LogLevel_Info, GetNodeId(), "Received Basic set from node %d: level=%d. Treating it as a Basic report.", GetNodeId(), _data[1] );
 			if( !m_ignoreMapping && m_mapping != 0 )
 			{
-        //Log::Write( LogLevel_Info, GetNodeId(), "UpdateMappedClass: %d", _data[1]);
+        Log::Write( LogLevel_Info, GetNodeId(), "UpdateMappedClass: %d", _data[1]);
 				UpdateMappedClass( _instance, m_mapping, _data[1] );
 			}
-			else if( ValueByte* value = static_cast<ValueByte*>( GetValue( _instance, 0 ) ) )
+
+      ValueByte* value = static_cast<ValueByte*>( GetValue( _instance, 0 ));
+
+      // Work around to always create a Basic label, especially when there's no mapping, so it
+      // can be used by higher layers
+      if (!value) {
+        m_mapping = 0;
+        CreateVars(1);
+        value = static_cast<ValueByte*>( GetValue( _instance, 0 ));
+      }
+			
+			if(value /* ValueByte* value = static_cast<ValueByte*>( GetValue( _instance, 0 ) )*/ )
 			{
-         //Log::Write( LogLevel_Info, GetNodeId(), "Update Basic Value");
+       Log::Write( LogLevel_Info, GetNodeId(), "Update Basic Value");
 				value->OnValueRefreshed( _data[1] );
 				value->Release();
 			}
@@ -341,9 +353,19 @@ bool Basic::SetMapping
 		res = true;
 	}
 
-	if( m_mapping == 0 && _doLog )
+	if( m_mapping == 0 )
 	{
-		Log::Write( LogLevel_Info, GetNodeId(), "    COMMAND_CLASS_BASIC is not mapped" );
+		if (_doLog )
+			Log::Write( LogLevel_Info, GetNodeId(), "    COMMAND_CLASS_BASIC is not mapped" );
+		if( Node* node = GetNodeUnsafe() )
+		{
+			if (m_instances.size() > 0) {
+				for (unsigned int i = 0; i < m_instances.size(); i++)
+					node->CreateValueByte( ValueID::ValueGenre_Basic, GetCommandClassId(), m_instances[i], 0, "Basic", "", false, false, 0, 0 );
+			} else {
+				node->CreateValueByte( ValueID::ValueGenre_Basic, GetCommandClassId(), 0, 0, "Basic", "", false, false, 0, 0 );
+			}
+		}
 	}
 	return res;
 }

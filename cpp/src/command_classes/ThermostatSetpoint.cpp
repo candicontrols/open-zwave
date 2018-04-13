@@ -196,7 +196,12 @@ bool ThermostatSetpoint::RequestValue
 	{
 		value->Release();
 		// Request the setpoint value
-		Msg* msg = new Msg( "ThermostatSetpointCmd_Get", GetNodeId(), REQUEST, FUNC_ID_ZW_SEND_DATA, true, true, FUNC_ID_APPLICATION_COMMAND_HANDLER, GetCommandClassId() );
+
+    char str[8];
+    snprintf(str, 8, "%d", _setPointIndex);
+    string index = str;
+    
+		Msg* msg = new Msg( "ThermostatSetpointCmd_Get " + index, GetNodeId(), REQUEST, FUNC_ID_ZW_SEND_DATA, true, true, FUNC_ID_APPLICATION_COMMAND_HANDLER, GetCommandClassId() );
 		msg->SetInstance( this, _instance );
 		msg->Append( GetNodeId() );
 		msg->Append( 3 );

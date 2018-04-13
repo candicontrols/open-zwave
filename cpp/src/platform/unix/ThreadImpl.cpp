@@ -120,6 +120,7 @@ bool ThreadImpl::Terminate
 
 	//m_hThread = NULL;
 	m_bIsRunning = false;
+
 	pthread_cancel( m_hThread );
 	pthread_join( m_hThread, &data );
 

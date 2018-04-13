@@ -41,9 +41,11 @@ using namespace OpenZWave;
 #include "command_classes/CentralScene.h"
 #include "command_classes/ClimateControlSchedule.h"
 #include "command_classes/Clock.h"
+#include "command_classes/Color.h"
 #include "command_classes/Configuration.h"
 #include "command_classes/ControllerReplication.h"
 #include "command_classes/CRC16Encap.h"
+#include "command_classes/DeviceResetLocally.h"
 #include "command_classes/DoorLock.h"
 #include "command_classes/DoorLockLogging.h"
 #include "command_classes/EnergyProduction.h"
@@ -78,10 +80,10 @@ using namespace OpenZWave;
 #include "command_classes/ThermostatMode.h"
 #include "command_classes/ThermostatOperatingState.h"
 #include "command_classes/ThermostatSetpoint.h"
-#include "command_classes/Time.h"
 #include "command_classes/UserCode.h"
 #include "command_classes/Version.h"
 #include "command_classes/WakeUp.h"
+#include "command_classes/ZWavePlusInfo.h"
 
 #include "value_classes/ValueBool.h"
 #include "value_classes/ValueButton.h"
@@ -230,11 +232,12 @@ void CommandClasses::RegisterCommandClasses
 	cc.Register( ThermostatMode::StaticGetCommandClassId(), ThermostatMode::StaticGetCommandClassName(), ThermostatMode::Create );
 	cc.Register( ThermostatOperatingState::StaticGetCommandClassId(), ThermostatOperatingState::StaticGetCommandClassName(), ThermostatOperatingState::Create );
 	cc.Register( ThermostatSetpoint::StaticGetCommandClassId(), ThermostatSetpoint::StaticGetCommandClassName(), ThermostatSetpoint::Create );
-	cc.Register( Time::StaticGetCommandClassId(), Time::StaticGetCommandClassName(), Time::Create );
+	//cc.Register( Time::StaticGetCommandClassId(), Time::StaticGetCommandClassName(), Time::Create );
 	cc.Register( Version::StaticGetCommandClassId(), Version::StaticGetCommandClassName(), Version::Create );
 	cc.Register( UserCode::StaticGetCommandClassId(), UserCode::StaticGetCommandClassName(), UserCode::Create );
 	cc.Register( Version::StaticGetCommandClassId(), Version::StaticGetCommandClassName(), Version::Create );
 	cc.Register( WakeUp::StaticGetCommandClassId(), WakeUp::StaticGetCommandClassName(), WakeUp::Create );
+  cc.Register( ZWavePlusInfo::StaticGetCommandClassId(), ZWavePlusInfo::StaticGetCommandClassName(), ZWavePlusInfo::Create );
 
 	// Now all the command classes have been registered, we can modify the
 	// supported command classes array according to the program options.

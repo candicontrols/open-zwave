@@ -37,6 +37,29 @@ namespace OpenZWave
 	/** \brief Implements COMMAND_CLASS_SECURITY (0x98), a Z-Wave device command class.
 	 */
 
+
+	enum SecurityCmd
+	{
+		SecurityCmd_SupportedGet			= 0x02,
+		SecurityCmd_SupportedReport			= 0x03,
+		SecurityCmd_SchemeGet				= 0x04,
+		SecurityCmd_SchemeReport			= 0x05,
+		SecurityCmd_NetworkKeySet			= 0x06,
+		SecurityCmd_NetworkKeyVerify		= 0x07,
+		SecurityCmd_SchemeInherit			= 0x08,
+		SecurityCmd_NonceGet				= 0x40,
+		SecurityCmd_NonceReport				= 0x80,
+		SecurityCmd_MessageEncap			= 0x81,
+		SecurityCmd_MessageEncapNonceGet	= 0xc1
+	};
+
+	enum SecurityScheme
+	{
+		SecurityScheme_Zero					= 0x00,
+	};
+
+	
+
 	typedef struct SecurityPayload {
 		uint8 m_length;
 		uint8 m_part;
@@ -72,6 +95,7 @@ namespace OpenZWave
 		static uint8 const StaticGetCommandClassId(){ return 0x98; }
 		static string const StaticGetCommandClassName(){ return "COMMAND_CLASS_SECURITY"; }
 		bool Init();
+		bool ExchangeNetworkKeys();
 		// From CommandClass
 		virtual uint8 const GetCommandClassId()const{ return StaticGetCommandClassId(); }
 		virtual string const GetCommandClassName()const{ return StaticGetCommandClassName(); }

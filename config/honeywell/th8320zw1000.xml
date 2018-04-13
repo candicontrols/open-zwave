@@ -42,4 +42,12 @@
     </SupportedModes>
   </CommandClass>
 
+  <CommandClass id="67" name="COMMAND_CLASS_THERMOSTAT_SETPOINT" version="1" request_flags="4" innif="true" base="0">
+   <Instance index="1" />
+     <Value type="decimal" genre="user" instance="1" index="1" label="HeatSetPoint" units="F" read_only="false" write_only="false" verify_changes="false" poll_intensity="0" min="0" max="0" value="65" />
+     <Value type="decimal" genre="user" instance="1" index="2" label="CoolSetPoint" units="F" read_only="false" write_only="false" verify_changes="false" poll_intensity="0" min="0" max="0" value="80" />
+     <Value type="decimal" genre="user" instance="1" index="7" label="Furnace" units="C" read_only="false" write_only="false" verify_changes="false" poll_intensity="0" min="0" max="0" value="0.0" />
+     <Value type="decimal" genre="user" instance="1" index="8" label="Dry Air" units="C" read_only="false" write_only="false" verify_changes="false" poll_intensity="0" min="0" max="0" value="0.0" />
+   </CommandClass>
+
 </Product>

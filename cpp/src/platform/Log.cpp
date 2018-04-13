@@ -85,26 +85,6 @@ Log* Log::Create
 	return s_instance;
 }
 
-//-----------------------------------------------------------------------------
-//	<Log::Create>
-//	Static creation of the singleton
-//-----------------------------------------------------------------------------
-/* 	It isn't clear this is ever called or used.  If no one complains, consider
-	deleting this code in April 2012.
-Log* Log::Create
-(
-	i_LogImpl *LogClass
-)
-{
-	if (NULL == s_instance )
-	{
-		s_instance = new Log( "" );
-		s_dologging = true;
-	}
-	SetLoggingClass( LogClass );
-	return s_instance;
-}
-*/
 
 //-----------------------------------------------------------------------------
 //	<Log::Destroy>
@@ -144,13 +124,15 @@ bool Log::SetLoggingClass
 //-----------------------------------------------------------------------------
 void Log::SetLoggingState
 (
-	bool _dologging
+	bool _dologging,
+  bool _bConsoleOutput
 )
 {
 	bool prevLogging = s_dologging;
 	s_dologging = _dologging;
 	
 	if (!prevLogging && s_dologging) Log::Write(LogLevel_Always, "Logging started\n\n");
+  m_pImpl->SetConsoleOutput(_bConsoleOutput);
 }
 
 //-----------------------------------------------------------------------------

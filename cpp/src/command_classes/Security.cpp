@@ -298,6 +298,32 @@ bool Security::Init
 
 	return true;
 }
+
+//-----------------------------------------------------------------------------
+// <Security::RequestState>
+// Request current state from the device
+//-----------------------------------------------------------------------------
+bool Security::ExchangeNetworkKeys
+(
+)
+{
+	if (GetNodeUnsafe()->IsAddingNode()) {
+		Msg * msg = new Msg ("SecurityCmd_SchemeGet", GetNodeId(), REQUEST, FUNC_ID_ZW_SEND_DATA, true, true, FUNC_ID_APPLICATION_COMMAND_HANDLER, GetCommandClassId() );
+		msg->Append( GetNodeId() );
+		msg->Append( 3 );
+		msg->Append( GetCommandClassId() );
+		msg->Append( SecurityCmd_SchemeGet );
+		msg->Append( 0 );
+		msg->Append( GetDriver()->GetTransmitOptions() );
+		/* SchemeGet is unencrypted */
+		GetDriver()->SendMsg(msg, Driver::MsgQueue_Security);
+		return true;
+	}
+	return false;
+}
+
+
+
 //-----------------------------------------------------------------------------
 // <Security::RequestState>
 // Request current state from the device
@@ -757,7 +783,7 @@ bool Security::EncryptMessage
 		initializationVector[8+i] = _nonce[i];
 	}
 	uint8 mac[8];
-	this->GenerateAuthentication(&msg->GetBuffer()[7], msg->GetLength()+2, GetDriver()->GetNodeId(), GetNodeId(), initializationVector, mac);
+	this->GenerateAuthentication(&msg->GetBuffer()[7], msg->GetLength()+2, GetDriver()->GetControllerNodeId(), GetNodeId(), initializationVector, mac);
 	for(int i=0; i<8; ++i )
 	{
 		msg->Append( mac[i] );
@@ -880,7 +906,7 @@ bool Security::DecryptMessage
 	/* we have to regenerate the IV as the ofb decryption routine will alter it. */
 	createIVFromPacket_inbound(_data, iv);
 
-	this->GenerateAuthentication(_data, _length, GetNodeId(), GetDriver()->GetNodeId(), iv, mac);
+	this->GenerateAuthentication(_data, _length, GetNodeId(), GetDriver()->GetControllerNodeId(), iv, mac);
 	if (memcmp(&_data[8+encryptedpacketsize+2], mac, 8) != 0) {
 		Log::Write(LogLevel_Warning, GetNodeId(), "MAC Authentication of Packet Failed. Dropping");
 		if (m_queue.size() > 1)

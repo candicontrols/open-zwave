@@ -373,7 +373,10 @@ bool ClimateControlSchedule::SetValue
 
 		if( state && setback )
 		{
-			ValueList::Item const& item = state->GetItem();
+			ValueList::Item const *item = state->GetItem();
+			if (item == NULL) {
+				return false;
+			}
 
 			Msg* msg = new Msg( "ClimateControlScheduleCmd_OverrideSet", GetNodeId(), REQUEST, FUNC_ID_ZW_SEND_DATA, true, true, FUNC_ID_APPLICATION_COMMAND_HANDLER, GetCommandClassId() );
 			msg->SetInstance( this, instance );

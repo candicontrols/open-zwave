@@ -31,7 +31,8 @@
 #include "Msg.h"
 #include "Driver.h"
 #include "Node.h"
-#include "platform/Log.h"
+#include "Utils.h"
+
 
 #include "value_classes/ValueByte.h"
 #include "value_classes/ValueList.h"
@@ -148,8 +149,8 @@ bool ControllerReplication::SetValue
 		{
 			if( ValueList* value = static_cast<ValueList*>( GetValue( instance, ControllerReplicationIndex_Function ) ) )
 			{
-				ValueList::Item const& item = (static_cast<ValueList const*>( &_value))->GetItem();
-				value->OnValueRefreshed( item.m_value );
+				ValueList::Item const *item = (static_cast<ValueList const*>( &_value))->GetItem();
+				value->OnValueRefreshed( item->m_value );
 				value->Release();
 				res = true;
 			}
@@ -197,8 +198,9 @@ bool ControllerReplication::StartReplication
 
 	if( ValueList* value = static_cast<ValueList*>( GetValue( _instance, ControllerReplicationIndex_Function ) ) )
 	{
-		ValueList::Item const& item = value->GetItem();
-		m_funcId = item.m_value;
+		ValueList::Item const *item = value->GetItem();
+		if (item)
+			m_funcId = item->m_value;
 		value->Release();
 	}
 	else
@@ -243,7 +245,7 @@ void ControllerReplication::SendNextData
 			}
 		}
 		i = m_nodeId == -1 ? 0 : m_nodeId+1;
-		GetDriver()->LockNodes();
+		LockGuard LG(GetDriver()->m_nodeMutex);
 		while( i < 256 )
 		{
 			if( GetDriver()->m_nodes[i] )
@@ -258,7 +260,6 @@ void ControllerReplication::SendNextData
 			}
 			i++;
 		}
-		GetDriver()->ReleaseNodes();
 		m_nodeId = i;
 		break;
 	}

@@ -60,6 +60,7 @@ namespace OpenZWave
 		 * Notifications of various Z-Wave events sent to the watchers
 		 * registered with the Manager::AddWatcher method.
 		 * \see Manager::AddWatcher
+		 * \see Manager::BeginControllerCommand
 	     */
 		enum NotificationType
 		{
@@ -84,6 +85,7 @@ namespace OpenZWave
 			Type_DriverReady,					/**< A driver for a PC Z-Wave controller has been added and is ready to use.  The notification will contain the controller's Home ID, which is needed to call most of the Manager methods. */
 			Type_DriverFailed,					/**< Driver failed to load */
 			Type_DriverReset,					/**< All nodes and values for this driver have been removed.  This is sent instead of potentially hundreds of individual node and value notifications. */
+      Type_DriverNotResponding, /**< Serial port has stopped responding. */
 			Type_StaticNodeQueriesStarted,				/** Now performing non-essential queries on a node. */
 			Type_EssentialNodeQueriesComplete,	/**< The queries on a node that are essential to its operation have been completed. The node can now handle incoming messages. */
 			Type_NodeQueriesComplete,			/**< All the initialisation queries on a node have been completed. */
@@ -91,9 +93,14 @@ namespace OpenZWave
 			Type_AllNodesQueriedSomeDead,				/**< All nodes have been queried but some dead nodes found. */
 			Type_AllNodesQueried,					/**< All nodes have been queried, so client application can expected complete data. */
 			Type_Notification,					/**< An error has occured that we need to report. */
-      Type_SecurityChanged,
-      Type_Error = Type_Notification,
-			Type_DriverRemoved					/**< The Driver is being removed. (either due to Error or by request) Do Not Call Any Driver Related Methods after recieving this call */
+			Type_SecurityChanged,
+			Type_Error = Type_Notification,
+			Type_DriverRemoved,					/**< The Driver is being removed. (either due to Error or by request) Do Not Call Any Driver Related Methods after receiving this call */
+			Type_ControllerCommand,				/**< When Controller Commands are executed, Notifications of Success/Failure etc are communicated via this Notification
+												  * Notification::GetEvent returns Driver::ControllerState and Notification::GetNotification returns Driver::ControllerError if there was a error */
+			Type_NodeReset,						/**< The Device has been reset and thus removed from the NodeList in OZW */
+			Type_NeighborUpdateDone,
+			Type_NeighborUpdateFailed
 		};
 
 		/**
@@ -144,10 +151,10 @@ namespace OpenZWave
 		uint8 GetGroupIdx()const{ assert(Type_Group==m_type); return m_byte; }
 
 		/**
-		 * Get the event value of a notification.  Only valid in NotificationType::Type_NodeEvent notifications.
+		 * Get the event value of a notification.  Only valid in Notification::Type_NodeEvent and Notification::Type_ControllerCommand notifications.
 		 * \return the event value.
 		 */
-		uint8 GetEvent()const{ assert(Type_NodeEvent==m_type); return m_byte; }
+		uint8 GetEvent()const{ assert((Type_NodeEvent==m_type) || (Type_ControllerCommand == m_type)); return m_event; }
 
 		/**
 		 * Get the button id of a notification.  Only valid in NotificationType::Type_CreateButton, DeleteButton,
@@ -174,6 +181,11 @@ namespace OpenZWave
 		 */
 		uint8 GetByte()const{ return m_byte; }
 
+		/**
+		 * Helper Function to return the Notification as a String
+		 * \return A string representation of this Notification
+		 */
+
 	private:
 		Notification( NotificationType _type ): m_type( _type ), m_byte(0){}
 		~Notification(){}
@@ -182,14 +194,15 @@ namespace OpenZWave
 		void SetHomeNodeIdAndInstance ( uint32 const _homeId, uint8 const _nodeId, uint32 const _instance ){ m_valueId = ValueID( _homeId, _nodeId, _instance ); }
 		void SetValueId( ValueID const& _valueId ){ m_valueId = _valueId; }
 		void SetGroupIdx( uint8 const _groupIdx ){ assert(Type_Group==m_type); m_byte = _groupIdx; }
-		void SetEvent( uint8 const _event ){ assert(Type_NodeEvent==m_type); m_byte = _event; }
+		void SetEvent( uint8 const _event ){ assert(Type_NodeEvent==m_type || Type_ControllerCommand == m_type); m_event = _event; }
 		void SetSceneId( uint8 const _sceneId ){ assert(Type_SceneEvent==m_type); m_byte = _sceneId; }
 		void SetButtonId( uint8 const _buttonId ){ assert(Type_CreateButton==m_type||Type_DeleteButton==m_type||Type_ButtonOn==m_type||Type_ButtonOff==m_type); m_byte = _buttonId; }
-		void SetNotification( uint8 const _noteId ){ assert(Type_Notification==m_type); m_byte = _noteId; }
+		void SetNotification( uint8 const _noteId ){ assert((Type_Notification==m_type) || (Type_ControllerCommand == m_type)); m_byte = _noteId; }
 
 		NotificationType	m_type;
 		ValueID				m_valueId;
 		uint8				m_byte;
+		uint8				m_event;
 	};
 
 } //namespace OpenZWave

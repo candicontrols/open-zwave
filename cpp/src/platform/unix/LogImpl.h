@@ -50,6 +50,7 @@ namespace OpenZWave
 		void QueueDump();
 		void QueueClear();
 		void SetLoggingState( LogLevel _saveLevel, LogLevel _queueLevel, LogLevel _dumpTrigger );
+    void SetConsoleOutput( bool _bConsoleOutput) { m_bConsoleOutput = _bConsoleOutput; };
 		void SetLogFileName( string _filename );
 
 		string GetTimeStampString();

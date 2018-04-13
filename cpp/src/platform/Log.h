@@ -62,6 +62,7 @@ namespace OpenZWave
 		virtual void Write( LogLevel _level, uint8 const _nodeId, char const* _format, va_list _args ) = 0;
 		virtual void QueueDump() = 0;
 		virtual void QueueClear() = 0;
+    virtual void SetConsoleOutput( bool _bConsoleOutput ) = 0;
 		virtual void SetLoggingState( LogLevel _saveLevel, LogLevel _queueLevel, LogLevel _dumpTrigger ) = 0;
 		virtual void SetLogFileName( string _filename ) = 0;
 	};
@@ -110,7 +111,7 @@ namespace OpenZWave
 		 * \brief Enable or disable library logging (retained for backward compatibility)
 		 * \param _dologging  If true, logging is enabled; if false, disabled
 		*/
-		static void SetLoggingState(bool _dologging);
+		static void SetLoggingState(bool _dologging, bool _bConsoleOutput = true);
 
 		/**
 		 * \brief Enable or disable library logging.  To disable, set _saveLevel and _queueLevel

@@ -36,7 +36,7 @@ AR     := $(CROSS_COMPILE)ar rc
 RANLIB := $(CROSS_COMPILE)ranlib
 
 DEBUG_CFLAGS    := -Wall -Wno-inline -Wno-format -Werror -g -DDEBUG -DLOG_STDERR -fPIC -Werror  -Wno-unknown-pragmas   -Wno-sequence-point 
-RELEASE_CFLAGS  := -Wall -Wno-unknown-pragmas -Werror -O3 -DNDEBUG -fPIC -Werror -fno-exceptions -Wno-unknown-pragmas   -Wno-sequence-point 
+RELEASE_CFLAGS  := -Wall -Wno-unknown-pragmas -Werror -O3 -DNDEBUG -fPIC -Werror -Wno-unknown-pragmas   -Wno-sequence-point 
 
 DEBUG_LDFLAGS	:= -g
 
@@ -50,7 +50,7 @@ SRCDIR  ?= ../..
 LIBDIR	?= $(SRCDIR)/lib/linux
 
 INCLUDES	:= -I $(SRCDIR)/src -I $(SRCDIR)/src/command_classes/ -I $(SRCDIR)/src/value_classes/ \
-	-I $(SRCDIR)/src/platform/ -I $(SRCDIR)/src/platform/unix -I $(SRCDIR)/tinyxml/ -I $(SRCDIR)/../../libcandi_s  #-I $(SRCDIR)/hidapi/hidapi/
+	-I $(SRCDIR)/src/platform/ -I $(SRCDIR)/src/platform/unix -I $(SRCDIR)/tinyxml/ 
 SOURCES		:= $(SRCDIR)/src $(SRCDIR)/src/command_classes $(SRCDIR)/tinyxml \
 	$(SRCDIR)/src/value_classes $(SRCDIR)/src/platform $(SRCDIR)/src/platform/unix $(SRCDIR)/src/aes
 
@@ -66,8 +66,8 @@ VPATH = $(SRCDIR)/src:$(SRCDIR)/src/command_classes:$(SRCDIR)/tinyxml:$(SRCDIR)/
 	rm -f $@.$$$$
 
 tinyxml  := $(notdir $(wildcard $(SRCDIR)/tinyxml/*.cpp))
-hidapi   := $(notdir $(wildcard $(SRCDIR)/hidapi/linux/hid.c)) # we do not want the libusb version
-aes      :=  $(notdir $(wildcard $(SRCDIR)/src/aes/*.c))
+#hidapi   := $(notdir $(wildcard $(SRCDIR)/hidapi/linux/hid.c)) # we do not want the libusb version
+aes      := $(notdir $(wildcard $(SRCDIR)/src/aes/*.c))
 cclasses := $(notdir $(wildcard $(SRCDIR)/src/command_classes/*.cpp))
 vclasses := $(notdir $(wildcard $(SRCDIR)/src/value_classes/*.cpp))
 pform    := $(notdir $(wildcard $(SRCDIR)/src/platform/*.cpp)) \
@@ -115,11 +115,12 @@ endif
 
 #create a vers.cpp file that contains our version and subversion revisions
 vers.cpp:
-	@echo "Creating Vers.cpp file"
+	@echo "Creating vers.cpp file"
 	@echo '#include "Defs.h"' > vers.cpp
 	@echo 'uint16_t ozw_vers_major = $(VERSION_MAJ);' >> vers.cpp
 	@echo 'uint16_t ozw_vers_minor = $(VERSION_MIN);' >> vers.cpp
 	@echo 'uint16_t ozw_vers_revision = $(VERSION_REV);' >> vers.cpp
+	@echo 'char ozw_version_string[] = "candi/git";' >> vers.cpp
 
 vers.o:	vers.cpp
 

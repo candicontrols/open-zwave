@@ -55,6 +55,7 @@ namespace OpenZWave
 		bool IsAwake()const{ return m_awake; }
 		void SetAwake( bool _state );
 		void SetPollRequired(){ m_pollRequired = true; }
+		void SetNeighborUpdatePending(){ m_neighborUpdatePending = true; }
 
 		// From CommandClass
 		virtual bool RequestState( uint32 const _requestFlags, uint8 const _instance, Driver::MsgQueue const _queue );
@@ -77,7 +78,7 @@ namespace OpenZWave
 		list<Driver::MsgQueueItem>	m_pendingQueue;		// Messages waiting to be sent when the device wakes up
 		bool						m_awake;
 		bool						m_pollRequired;
-		bool						m_notification;
+		bool						m_neighborUpdatePending;
 	};
 
 } // namespace OpenZWave

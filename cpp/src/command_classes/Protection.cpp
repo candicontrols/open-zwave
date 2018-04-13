@@ -146,7 +146,9 @@ bool Protection::SetValue
 	if( ValueID::ValueType_List == _value.GetID().GetType() )
 	{
 		ValueList const* value = static_cast<ValueList const*>(&_value);
-		ValueList::Item const& item = value->GetItem();
+		ValueList::Item const *item = value->GetItem();
+		if (item == NULL)
+			return false;
 
 		Log::Write( LogLevel_Info, GetNodeId(), "Protection::Set - Setting protection state to '%s'", item.m_label.c_str() );
 		Msg* msg = new Msg( "ProtectionCmd_Set", GetNodeId(), REQUEST, FUNC_ID_ZW_SEND_DATA, true );

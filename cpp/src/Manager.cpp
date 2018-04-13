@@ -28,6 +28,7 @@
 #include <algorithm>
 #include <string>
 #include <sstream>
+#include <iomanip>
 
 #include "Defs.h"
 #include "Manager.h"
@@ -36,6 +37,7 @@
 #include "Notification.h"
 #include "Options.h"
 #include "Scene.h"
+#include "Utils.h"
 
 #include "platform/Mutex.h"
 #include "platform/Event.h"
@@ -65,6 +67,7 @@ Manager* Manager::s_instance = NULL;
 extern uint16_t ozw_vers_major;
 extern uint16_t ozw_vers_minor;
 extern uint16_t ozw_vers_revision;
+extern char ozw_version_string[];
 
 //-----------------------------------------------------------------------------
 //	Construction
@@ -117,6 +120,15 @@ std::string Manager::getVersionAsString() {
 	return versionstream.str();
 }
 //-----------------------------------------------------------------------------
+//      <Manager::getVersionLong>
+//      Static method to get the long Version of OZW as a string.
+//-----------------------------------------------------------------------------
+std::string Manager::getVersionLongAsString() {
+        std::ostringstream versionstream;
+        versionstream << ozw_version_string;
+        return versionstream.str();
+}
+//-----------------------------------------------------------------------------
 //	<Manager::getVersion>
 //	Static method to get the Version of OZW.
 //-----------------------------------------------------------------------------
@@ -156,9 +168,17 @@ Manager::Manager
 
 	int nSaveLogLevel = (int) LogLevel_Detail;
 	Options::Get()->GetOptionAsInt( "SaveLogLevel", &nSaveLogLevel );
+	if ((nSaveLogLevel == 0) || (nSaveLogLevel > LogLevel_StreamDetail)) {
+		Log::Write(LogLevel_Warning, "Invalid LogLevel Specified for SaveLogLevel in Options.xml");
+		nSaveLogLevel = (int) LogLevel_Detail;
+	}
 
 	int nQueueLogLevel = (int) LogLevel_Debug;
 	Options::Get()->GetOptionAsInt( "QueueLogLevel", &nQueueLogLevel );
+	if ((nQueueLogLevel == 0) || (nQueueLogLevel > LogLevel_StreamDetail)) {
+		Log::Write(LogLevel_Warning, "Invalid LogLevel Specified for QueueLogLevel in Options.xml");
+		nSaveLogLevel = (int) LogLevel_Debug;
+	}
 
 	int nDumpTrigger = (int) LogLevel_Warning;
 	Options::Get()->GetOptionAsInt( "DumpTriggerLevel", &nDumpTrigger );
@@ -346,6 +366,8 @@ Driver* Manager::GetDriver
 	uint32 const _homeId
 )
 {
+  if (_homeId == 0) return NULL;
+  
 	map<uint32,Driver*>::iterator it = m_readyDrivers.find( _homeId );
 	if( it != m_readyDrivers.end() )
 	{
@@ -354,8 +376,30 @@ Driver* Manager::GetDriver
 
 	Log::Write( LogLevel_Error, "mgr,     Manager::GetDriver failed - Home ID 0x%.8x is unknown", _homeId );
 	OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_HOMEID, "Invalid HomeId passed to GetDriver");
+  
 	//assert(0); << Don't assert as this might be a valid condition when we call RemoveDriver. See comments above.
 	return NULL;
+}
+
+
+void Manager::SerialFailure(string device) {
+
+  for(list<Driver*>::iterator pit = m_pendingDrivers.begin(); pit != m_pendingDrivers.end(); ++pit ) {
+    if (device == (*pit)->GetControllerPath()) {
+      Notification* notification = new Notification( Notification::Type_DriverNotResponding );
+      (*pit)->QueueNotification( notification );
+      return;
+    }
+  }
+  
+  for( map<uint32,Driver*>::iterator rit = m_readyDrivers.begin(); rit != m_readyDrivers.end(); ++rit ) {
+    if (device == rit->second->GetControllerPath()) {
+      Notification* notification = new Notification( Notification::Type_DriverNotResponding );
+      rit->second->QueueNotification( notification );
+      return;
+    }
+  }
+  Log::Write(LogLevel_Error, "mgr,     Failed to notify of serial failure for %s", device.c_str());
 }
 
 //-----------------------------------------------------------------------------
@@ -393,7 +437,7 @@ void Manager::SetDriverReady
 
 		// Notify the watchers
 		Notification* notification = new Notification(success ? Notification::Type_DriverReady : Notification::Type_DriverFailed );
-		notification->SetHomeAndNodeIds( _driver->GetHomeId(), _driver->GetNodeId() );
+		notification->SetHomeAndNodeIds( _driver->GetHomeId(), _driver->GetControllerNodeId() );
 		_driver->QueueNotification( notification );
 	}
 }
@@ -409,7 +453,7 @@ uint8 Manager::GetControllerNodeId
 {
 	if( Driver* driver = GetDriver( _homeId ) )
 	{
-		return driver->GetNodeId();
+		return driver->GetControllerNodeId();
 	}
 
 	Log::Write( LogLevel_Info, "mgr,     GetControllerNodeId() failed - _homeId %d not found", _homeId );
@@ -743,7 +787,7 @@ uint8 Manager::GetPollIntensity
 	uint8 intensity = 0;
 	if( Driver* driver = GetDriver( _valueId.GetHomeId() ) )
 	{
-		driver->LockNodes();
+		LockGuard LG(driver->m_nodeMutex);
 		if( Value* value = driver->GetValue( _valueId ) )
 		{
 			intensity = value->GetPollIntensity();
@@ -751,7 +795,6 @@ uint8 Manager::GetPollIntensity
 		} else {
 			OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetPollIntensity");
 		}
-		driver->ReleaseNodes();
 	}
 
  	return intensity;
@@ -775,11 +818,11 @@ bool Manager::RefreshNodeInfo
 	{
 		// Cause the node's data to be obtained from the Z-Wave network
 		// in the same way as if it had just been added.
+		LockGuard LG(driver->m_nodeMutex);
 		Node* node = driver->GetNode( _nodeId );
 		if( node )
 		{
 			node->SetQueryStage( Node::QueryStage_ProtocolInfo );
-			driver->ReleaseNodes();
 			return true;
 		}
 	}
@@ -799,12 +842,12 @@ bool Manager::RequestNodeState
 {
 	if( Driver* driver = GetDriver( _homeId ) )
 	{
+		LockGuard LG(driver->m_nodeMutex);
 		// Retreive the Node's session and dynamic data
 		Node* node = driver->GetNode( _nodeId );
 		if( node )
 		{
 			node->SetQueryStage( Node::QueryStage_Associations );
-			driver->ReleaseNodes();
 			return true;
 		}
 	}
@@ -823,12 +866,12 @@ bool Manager::RequestNodeDynamic
 {
 	if( Driver* driver = GetDriver( _homeId ) )
 	{
+		LockGuard LG(driver->m_nodeMutex);
 		// Retreive the Node's dynamic data
 		Node* node = driver->GetNode( _nodeId );
 		if( node )
 		{
 			node->SetQueryStage( Node::QueryStage_Dynamic );
-			driver->ReleaseNodes();
 			return true;
 		}
 	}
@@ -941,10 +984,12 @@ Node::SecurityState Manager::GetSecurityState
 )
 {
 	Node::SecurityState security = Node::SecurityState_NotSupported;
+#if 0
 	if( Driver* driver = GetDriver( _homeId ) )
 	{
 		security = driver->GetSecurityState( _nodeId );
 	}
+#endif
 	return security;
 }
 
@@ -1007,6 +1052,27 @@ uint8 Manager::GetNodeSecurity
 
 	return version;
 }
+
+
+//-----------------------------------------------------------------------------
+// <Manager::IsNodeZWavePlus>
+// Get if the Node is a ZWave Plus Supported Node
+//-----------------------------------------------------------------------------
+bool Manager::IsNodeZWavePlus
+(
+		uint32 const _homeId,
+		uint8 const _nodeId
+)
+{
+	bool version = false;
+	if( Driver* driver = GetDriver( _homeId ) )
+	{
+		version = driver->IsNodeZWavePlus( _nodeId );
+	}
+
+	return version;
+}
+
 
 //-----------------------------------------------------------------------------
 // <Manager::GetNodeBasic>
@@ -1077,7 +1143,10 @@ string Manager::GetNodeType
 {
 	if( Driver* driver = GetDriver( _homeId ) )
 	{
-		return driver->GetNodeType( _nodeId );
+		if (driver->IsNodeZWavePlus(_nodeId))
+			return driver->GetNodeDeviceTypeString(_nodeId);
+		else
+			return driver->GetNodeType( _nodeId );
 	}
 
 	return "Unknown";
@@ -1255,7 +1324,10 @@ string Manager::GetNodeManufacturerId
 {
 	if( Driver* driver = GetDriver( _homeId ) )
 	{
-		return driver->GetNodeManufacturerId( _nodeId );
+		uint16 mid = driver->GetNodeManufacturerId( _nodeId );
+		std::stringstream ss;
+		ss << "0x" << std::hex << std::setw(4) << std::setfill('0') << mid;
+		return ss.str();
 	}
 
 	return "Unknown";
@@ -1273,11 +1345,120 @@ string Manager::GetNodeProductType
 {
 	if( Driver* driver = GetDriver( _homeId ) )
 	{
-		return driver->GetNodeProductType( _nodeId );
+		uint16 mid = driver->GetNodeProductType( _nodeId );
+		std::stringstream ss;
+		ss << "0x" << std::hex << std::setw(4) << std::setfill('0') << mid;
+		return ss.str();
 	}
-
+	
 	return "Unknown";
 }
+
+//-----------------------------------------------------------------------------
+// <Manager::GetNodeDeviceType>
+// Get the node device type as reported in the Z-Wave+ Info report.
+//-----------------------------------------------------------------------------
+uint16 Manager::GetNodeDeviceType
+(
+		uint32 const _homeId,
+		uint8 const _nodeId
+)
+{
+	if( Driver* driver = GetDriver( _homeId ) )
+	{
+		return driver->GetNodeDeviceType( _nodeId );
+	}
+
+	return 0x00; // unknown
+}
+
+//-----------------------------------------------------------------------------
+// <Manager::GetNodeDeviceType>
+// Get the node device type as reported in the Z-Wave+ Info report.
+//-----------------------------------------------------------------------------
+string Manager::GetNodeDeviceTypeString
+(
+		uint32 const _homeId,
+		uint8 const _nodeId
+)
+{
+	if( Driver* driver = GetDriver( _homeId ) )
+	{
+		return driver->GetNodeDeviceTypeString( _nodeId );
+	}
+
+	return ""; // unknown
+}
+
+
+
+//-----------------------------------------------------------------------------
+// <Manager::GetNodeRole>
+// Get the node role as reported in the Z-Wave+ Info report.
+//-----------------------------------------------------------------------------
+uint8 Manager::GetNodeRole
+(
+		uint32 const _homeId,
+		uint8 const _nodeId
+)
+{
+	if( Driver* driver = GetDriver( _homeId ) )
+	{
+		return driver->GetNodeRole( _nodeId );
+	}
+
+	return 0x00; // unknown
+}
+
+//-----------------------------------------------------------------------------
+// <Manager::GetNodeRole>
+// Get the node role as reported in the Z-Wave+ Info report.
+//-----------------------------------------------------------------------------
+string Manager::GetNodeRoleString
+(
+		uint32 const _homeId,
+		uint8 const _nodeId
+)
+{
+	if( Driver* driver = GetDriver( _homeId ) )
+	{
+		return driver->GetNodeRoleString( _nodeId );
+	}
+
+	return ""; // unknown
+}
+
+
+uint8 Manager::GetNodePlusType
+(
+		uint32 const _homeId,
+		uint8 const _nodeId
+)
+{
+	if( Driver* driver = GetDriver( _homeId ) )
+	{
+		return driver->GetNodePlusType( _nodeId );
+	}
+
+	return 0x00; // unknown
+
+}
+
+string Manager::GetNodePlusTypeString
+(
+		uint32 const _homeId,
+		uint8 const _nodeId
+)
+{
+	if( Driver* driver = GetDriver( _homeId ) )
+	{
+		return driver->GetNodePlusTypeString( _nodeId );
+	}
+
+	return ""; // unknown
+
+}
+
 
 //-----------------------------------------------------------------------------
 // <Manager::GetNodeProductId>
@@ -1291,8 +1472,12 @@ string Manager::GetNodeProductId
 {
 	if( Driver* driver = GetDriver( _homeId ) )
 	{
-		return driver->GetNodeProductId( _nodeId );
+		uint16 mid = driver->GetNodeProductId( _nodeId );
+		std::stringstream ss;
+		ss << "0x" << std::hex << std::setw(4) << std::setfill('0') << mid;
+		return ss.str();
 	}
+
 
 	return "Unknown";
 }
@@ -1346,14 +1531,12 @@ bool Manager::IsNodeInfoReceived
 		Node *node;
 
 		// Need to lock and unlock nodes to check this information
-		driver->LockNodes();
+		LockGuard LG(driver->m_nodeMutex);
 
-		if( (node = driver->GetNodeUnsafe( _nodeId ) ) != NULL)
+		if( (node = driver->GetNode( _nodeId ) ) != NULL)
 		{
 			result = node->NodeInfoReceived();
 		}
-
-		driver->ReleaseNodes();
 	}
 
 	return result;
@@ -1376,13 +1559,13 @@ bool Manager::GetNodeClassInformation
 
 	if( Driver* driver = GetDriver( _homeId ) )
 	{
-	        Node *node;
+		Node *node;
 
-	        // Need to lock and unlock nodes to check this information
-	        driver->LockNodes();
+		// Need to lock and unlock nodes to check this information
+		LockGuard LG(driver->m_nodeMutex);
 
-	        if( (node = driver->GetNodeUnsafe( _nodeId ) ) != NULL)
-	        {
+		if( ( node = driver->GetNode( _nodeId ) ) != NULL )
+		{
 			CommandClass *cc;
 			if( node->NodeInfoReceived() && ( ( cc = node->GetCommandClass(_commandClassId)) != NULL ) )
 			{
@@ -1398,8 +1581,6 @@ bool Manager::GetNodeClassInformation
 				result = true;
 			}
 		}
-
-		driver->ReleaseNodes();
 	}
 
 	return result;
@@ -1411,8 +1592,8 @@ bool Manager::GetNodeClassInformation
 //-----------------------------------------------------------------------------
 bool Manager::IsNodeAwake
 (
-	uint32 const _homeId,
-	uint8 const _nodeId
+		uint32 const _homeId,
+		uint8 const _nodeId
 )
 {
 	if( IsNodeListeningDevice( _homeId, _nodeId ) )
@@ -1422,21 +1603,54 @@ bool Manager::IsNodeAwake
 	bool result = true;
 	if( Driver* driver = GetDriver( _homeId ) )
 	{
-	        // Need to lock and unlock nodes to check this information
-	        driver->LockNodes();
+		// Need to lock and unlock nodes to check this information
+		LockGuard LG(driver->m_nodeMutex);
 
-	        if( Node* node = driver->GetNodeUnsafe( _nodeId ) )
-	        {
+		if( Node* node = driver->GetNode( _nodeId ) )
+		{
 			if( WakeUp* wcc = static_cast<WakeUp*>( node->GetCommandClass( WakeUp::StaticGetCommandClassId() ) ) )
 			{
 				result = wcc->IsAwake();
 			}
 		}
-		driver->ReleaseNodes();
 	}
 	return result;
 }
 
+//-----------------------------------------------------------------------------
+// <Manager::SetWakeUpInterval>
+// Helper method to return whether a node is awake or sleeping
+//-----------------------------------------------------------------------------
+bool Manager::SetWakeUpInterval
+(
+    uint32 const _homeId,
+    uint8 const _nodeId,
+    uint32 const interval
+)
+{
+  if( IsNodeListeningDevice( _homeId, _nodeId ) )
+  {
+    return false;
+  }
+  
+  if( Driver* driver = GetDriver( _homeId ) )
+  {
+    // Need to lock and unlock nodes to check this information
+    LockGuard LG(driver->m_nodeMutex);
+
+    if( Node* node = driver->GetNode( _nodeId ) )
+    {
+      if( WakeUp* wcc = static_cast<WakeUp*>( node->GetCommandClass( WakeUp::StaticGetCommandClassId() ) ) )
+      {
+        ValueInt wakeupTime;
+        wakeupTime.Set(interval);
+
+        return wcc->SetValue(wakeupTime);
+      }
+    }
+  }
+  return false;
+}
 //-----------------------------------------------------------------------------
 // <Manager::IsNodeFailed>
 // Helper method to return whether a node is on the network or not
@@ -1450,10 +1664,10 @@ bool Manager::IsNodeFailed
 	bool result = false;
 	if( Driver* driver = GetDriver( _homeId ) )
 	{
-	        if( Node* node = driver->GetNode( _nodeId ) )
-	        {
+		LockGuard LG(driver->m_nodeMutex);
+		if( Node* node = driver->GetNode( _nodeId ) )
+		{
 			result = !node->IsNodeAlive();
-        		driver->ReleaseNodes();
 		}
 	}
 	return result;
@@ -1472,10 +1686,10 @@ string Manager::GetNodeQueryStage
 	string result = "Unknown";
 	if( Driver* driver = GetDriver( _homeId ) )
 	{
-	        if( Node* node = driver->GetNode( _nodeId ) )
-	        {
+		LockGuard LG(driver->m_nodeMutex);
+		if( Node* node = driver->GetNode( _nodeId ) )
+		{
 			result = node->GetQueryStageName( node->GetCurrentQueryStage() );
-        		driver->ReleaseNodes();
 		}
 	}
 	return result;
@@ -1514,7 +1728,7 @@ string Manager::GetValueLabel
 	string label;
 	if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 	{
-		driver->LockNodes();
+		LockGuard LG(driver->m_nodeMutex);
 		if( Value* value = driver->GetValue( _id ) )
 		{
 			label = value->GetLabel();
@@ -1522,7 +1736,6 @@ string Manager::GetValueLabel
 		} else {
 			OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueLabel");
 		}
-		driver->ReleaseNodes();
 	}
 
 	return label;
@@ -1534,13 +1747,13 @@ string Manager::GetValueLabel
 //-----------------------------------------------------------------------------
 void Manager::SetValueLabel
 (
-	ValueID const& _id,
-	string const& _value
+		ValueID const& _id,
+		string const& _value
 )
 {
 	if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 	{
-		driver->LockNodes();
+		LockGuard LG(driver->m_nodeMutex);
 		if( Value* value = driver->GetValue( _id ) )
 		{
 			value->SetLabel( _value );
@@ -1548,7 +1761,6 @@ void Manager::SetValueLabel
 		} else {
 			OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to SetValueLabel");
 		}
-		driver->ReleaseNodes();
 	}
 }
 
@@ -1558,13 +1770,13 @@ void Manager::SetValueLabel
 //-----------------------------------------------------------------------------
 string Manager::GetValueUnits
 (
-	ValueID const& _id
+		ValueID const& _id
 )
 {
 	string units;
 	if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 	{
-		driver->LockNodes();
+		LockGuard LG(driver->m_nodeMutex);
 		if( Value* value = driver->GetValue( _id ) )
 		{
 			units = value->GetUnits();
@@ -1572,7 +1784,6 @@ string Manager::GetValueUnits
 		} else {
 			OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueUnits");
 		}
-		driver->ReleaseNodes();
 	}
 
 	return units;
@@ -1584,13 +1795,13 @@ string Manager::GetValueUnits
 //-----------------------------------------------------------------------------
 void Manager::SetValueUnits
 (
- 	ValueID const& _id,
-	string const& _value
+		ValueID const& _id,
+		string const& _value
 )
 {
 	if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 	{
-		driver->LockNodes();
+		LockGuard LG(driver->m_nodeMutex);
 		if( Value* value = driver->GetValue( _id ) )
 		{
 			value->SetUnits( _value );
@@ -1598,7 +1809,6 @@ void Manager::SetValueUnits
 		} else {
 			OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to SetValueUnits");
 		}
-		driver->ReleaseNodes();
 	}
 }
 
@@ -1608,13 +1818,13 @@ void Manager::SetValueUnits
 //-----------------------------------------------------------------------------
 string Manager::GetValueHelp
 (
-	ValueID const& _id
+		ValueID const& _id
 )
 {
 	string help;
 	if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 	{
-		driver->LockNodes();
+		LockGuard LG(driver->m_nodeMutex);
 		if( Value* value = driver->GetValue( _id ) )
 		{
 			help = value->GetHelp();
@@ -1622,7 +1832,6 @@ string Manager::GetValueHelp
 		} else {
 			OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueHelp");
 		}
-		driver->ReleaseNodes();
 	}
 
 	return help;
@@ -1634,13 +1843,13 @@ string Manager::GetValueHelp
 //-----------------------------------------------------------------------------
 void Manager::SetValueHelp
 (
-	ValueID const& _id,
-	string const& _value
+		ValueID const& _id,
+		string const& _value
 )
 {
 	if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 	{
-		driver->LockNodes();
+		LockGuard LG(driver->m_nodeMutex);
 		if( Value* value = driver->GetValue( _id ) )
 		{
 			value->SetHelp( _value );
@@ -1648,7 +1857,6 @@ void Manager::SetValueHelp
 		} else {
 			OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to SetValueHelp");
 		}
-		driver->ReleaseNodes();
 	}
 }
 
@@ -1658,13 +1866,13 @@ void Manager::SetValueHelp
 //-----------------------------------------------------------------------------
 int32 Manager::GetValueMin
 (
-	ValueID const& _id
+		ValueID const& _id
 )
 {
 	int32 limit = 0;
 	if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 	{
-		driver->LockNodes();
+		LockGuard LG(driver->m_nodeMutex);
 		if( Value* value = driver->GetValue( _id ) )
 		{
 			limit = value->GetMin();
@@ -1672,7 +1880,6 @@ int32 Manager::GetValueMin
 		} else {
 			OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueMin");
 		}
-		driver->ReleaseNodes();
 	}
 
 	return limit;
@@ -1684,13 +1891,13 @@ int32 Manager::GetValueMin
 //-----------------------------------------------------------------------------
 int32 Manager::GetValueMax
 (
-	ValueID const& _id
+		ValueID const& _id
 )
 {
 	int32 limit = 0;
 	if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 	{
-		driver->LockNodes();
+		LockGuard LG(driver->m_nodeMutex);
 		if( Value* value = driver->GetValue( _id ) )
 		{
 			limit = value->GetMax();
@@ -1698,7 +1905,6 @@ int32 Manager::GetValueMax
 		} else {
 			OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueMax");
 		}
-		driver->ReleaseNodes();
 	}
 
 	return limit;
@@ -1710,13 +1916,13 @@ int32 Manager::GetValueMax
 //-----------------------------------------------------------------------------
 bool Manager::IsValueReadOnly
 (
-	ValueID const& _id
+		ValueID const& _id
 )
 {
 	bool res = false;
 	if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 	{
-		driver->LockNodes();
+		LockGuard LG(driver->m_nodeMutex);
 		if( Value* value = driver->GetValue( _id ) )
 		{
 			res = value->IsReadOnly();
@@ -1724,7 +1930,6 @@ bool Manager::IsValueReadOnly
 		} else {
 			OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to IsValueReadOnly");
 		}
-		driver->ReleaseNodes();
 	}
 
 	return res;
@@ -1736,13 +1941,13 @@ bool Manager::IsValueReadOnly
 //-----------------------------------------------------------------------------
 bool Manager::IsValueWriteOnly
 (
-	ValueID const& _id
+		ValueID const& _id
 )
 {
 	bool res = false;
 	if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 	{
-		driver->LockNodes();
+		LockGuard LG(driver->m_nodeMutex);
 		if( Value* value = driver->GetValue( _id ) )
 		{
 			res = value->IsWriteOnly();
@@ -1750,7 +1955,6 @@ bool Manager::IsValueWriteOnly
 		} else {
 			OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to IsValueWriteOnly");
 		}
-		driver->ReleaseNodes();
 	}
 
 	return res;
@@ -1762,13 +1966,13 @@ bool Manager::IsValueWriteOnly
 //-----------------------------------------------------------------------------
 bool Manager::IsValueSet
 (
-	ValueID const& _id
+		ValueID const& _id
 )
 {
 	bool res = false;
 	if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 	{
-		driver->LockNodes();
+		LockGuard LG(driver->m_nodeMutex);
 		if( Value* value = driver->GetValue( _id ) )
 		{
 			res = value->IsSet();
@@ -1776,7 +1980,6 @@ bool Manager::IsValueSet
 		} else {
 			OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to IsValueSet");
 		}
-		driver->ReleaseNodes();
 	}
 
 	return res;
@@ -1788,13 +1991,13 @@ bool Manager::IsValueSet
 //-----------------------------------------------------------------------------
 bool Manager::IsValuePolled
 (
-	ValueID const& _id
+		ValueID const& _id
 )
 {
 	bool res = false;
 	if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 	{
-		driver->LockNodes();
+		LockGuard LG(driver->m_nodeMutex);
 		if( Value* value = driver->GetValue( _id ) )
 		{
 			res = value->IsPolled();
@@ -1802,7 +2005,6 @@ bool Manager::IsValuePolled
 		} else {
 			OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to IsValuePolled");
 		}
-		driver->ReleaseNodes();
 	}
 
 	return res;
@@ -1826,7 +2028,7 @@ bool Manager::GetValueAsBool
 		{
 			if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 			{
-				driver->LockNodes();
+				LockGuard LG(driver->m_nodeMutex);
 				if( ValueBool* value = static_cast<ValueBool*>( driver->GetValue( _id ) ) )
 				{
 					*o_value = value->GetValue();
@@ -1835,14 +2037,13 @@ bool Manager::GetValueAsBool
 				} else {
 					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueAsBool");
 				}
-				driver->ReleaseNodes();
 			}
 		}
 		else if( ValueID::ValueType_Button == _id.GetType() )
 		{
 			if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 			{
-			    driver->LockNodes();
+				LockGuard LG(driver->m_nodeMutex);
 				if( ValueButton* value = static_cast<ValueButton*>( driver->GetValue( _id ) ) )
 				{
 					*o_value = value->IsPressed();
@@ -1851,7 +2052,6 @@ bool Manager::GetValueAsBool
 				} else {
 					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueAsBool");
 				}
-				driver->ReleaseNodes();
 			}
 		} else {
 			OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to GetValueAsBool is not a Bool or Button Value");
@@ -1879,7 +2079,7 @@ bool Manager::GetValueAsByte
 		{
 			if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 			{
-				driver->LockNodes();
+				LockGuard LG(driver->m_nodeMutex);
 				if( ValueByte* value = static_cast<ValueByte*>( driver->GetValue( _id ) ) )
 				{
 					*o_value = value->GetValue();
@@ -1888,7 +2088,6 @@ bool Manager::GetValueAsByte
 				} else {
 					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueAsByte");
 				}
-				driver->ReleaseNodes();
 			}
 		} else {
 			OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to GetValueAsByte is not a Byte Value");
@@ -1916,7 +2115,7 @@ bool Manager::GetValueAsFloat
 		{
 			if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 			{
-				driver->LockNodes();
+				LockGuard LG(driver->m_nodeMutex);
 				if( ValueDecimal* value = static_cast<ValueDecimal*>( driver->GetValue( _id ) ) )
 				{
 					string str = value->GetValue();
@@ -1926,7 +2125,6 @@ bool Manager::GetValueAsFloat
 				} else {
 					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueAsFloat");
 				}
-				driver->ReleaseNodes();
 			}
 		} else {
 			OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to GetValueAsFloat is not a Float Value");
@@ -1954,7 +2152,7 @@ bool Manager::GetValueAsInt
 		{
 			if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 			{
-				driver->LockNodes();
+				LockGuard LG(driver->m_nodeMutex);
 				if( ValueInt* value = static_cast<ValueInt*>( driver->GetValue( _id ) ) )
 				{
 					*o_value = value->GetValue();
@@ -1963,7 +2161,6 @@ bool Manager::GetValueAsInt
 				} else {
 					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueAsInt");
 				}
-				driver->ReleaseNodes();
 			}
 		} else {
 			OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to GetValueAsInt is not a Int Value");
@@ -1992,7 +2189,7 @@ bool Manager::GetValueAsRaw
 		{
 			if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 			{
-				driver->LockNodes();
+				LockGuard LG(driver->m_nodeMutex);
 				if( ValueRaw* value = static_cast<ValueRaw*>( driver->GetValue( _id ) ) )
 				{
 					*o_length = value->GetLength();
@@ -2003,7 +2200,6 @@ bool Manager::GetValueAsRaw
 				} else {
 					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueAsRaw");
 				}
-				driver->ReleaseNodes();
 			}
 		} else {
 			OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to GetValueAsRaw is not a Raw Value");
@@ -2031,7 +2227,7 @@ bool Manager::GetValueAsShort
 		{
 			if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 			{
-				driver->LockNodes();
+				LockGuard LG(driver->m_nodeMutex);
 				if( ValueShort* value = static_cast<ValueShort*>( driver->GetValue( _id ) ) )
 				{
 					*o_value = value->GetValue();
@@ -2040,7 +2236,6 @@ bool Manager::GetValueAsShort
 				} else {
 					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueAsShort");
 				}
-				driver->ReleaseNodes();
 			}
 		} else {
 			OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to GetValueAsShort is not a Short Value");
@@ -2067,8 +2262,8 @@ bool Manager::GetValueAsString
 	{
 		if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 		{
-			driver->LockNodes();
-
+			LockGuard LG(driver->m_nodeMutex);
+			
 			switch( _id.GetType() )
 			{
 				case ValueID::ValueType_Bool:
@@ -2125,10 +2320,16 @@ bool Manager::GetValueAsString
 				{
 					if( ValueList* value = static_cast<ValueList*>( driver->GetValue( _id ) ) )
 					{
-						ValueList::Item const& item = value->GetItem();
-						*o_value = item.m_label;
+						ValueList::Item const *item = value->GetItem();
+						if (item == NULL) {
+							o_value = NULL;
+							res = false;
+						} else {
+							*o_value = item->m_label;
+							res = true;
+						}
 						value->Release();
-						res = true;
+
 					} else {
 						OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueAsString");
 					}
@@ -2206,7 +2407,6 @@ bool Manager::GetValueAsString
 #endif
 			}
 
-			driver->ReleaseNodes();
 		}
 	}
 
@@ -2231,20 +2431,22 @@ bool Manager::GetValueListSelection
 		{
 			if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 			{
-				driver->LockNodes();
+				LockGuard LG(driver->m_nodeMutex);
 				if( ValueList* value = static_cast<ValueList*>( driver->GetValue( _id ) ) )
 				{
-					ValueList::Item const& item = value->GetItem();
-					if( &item != NULL )
+					ValueList::Item const *item = value->GetItem();
+					if( item != NULL && item->m_label.length() > 0)
 					{
-						*o_value = item.m_label;
+						*o_value = item->m_label;
 						res = true;
+					} else {
+						o_value = NULL;
+						Log::Write(LogLevel_Warning, "ValueList returned a NULL value for GetValueListSelection: %s", value->GetLabel().c_str());
 					}
 					value->Release();
 				} else {
 					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueListSelection");
 				}
-				driver->ReleaseNodes();
 			}
 		} else {
 			OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to GetValueListSelection is not a List Value");
@@ -2272,17 +2474,21 @@ bool Manager::GetValueListSelection
 		{
 			if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 			{
-				driver->LockNodes();
+				LockGuard LG(driver->m_nodeMutex);
 				if( ValueList* value = static_cast<ValueList*>( driver->GetValue( _id ) ) )
 				{
-					ValueList::Item const& item = value->GetItem();
-					*o_value = item.m_value;
+					ValueList::Item const *item = value->GetItem();
+					if (item == NULL) {
+						res = false;
+					} else {
+						*o_value = item->m_value;
+						res = true;
+					}
 					value->Release();
-					res = true;
+					
 				} else {
 					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueListSelection");
 				}
-				driver->ReleaseNodes();
 			}
 		} else {
 			OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to GetValueListSelection is not a List Value");
@@ -2310,7 +2516,7 @@ bool Manager::GetValueListItems
 		{
 			if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 			{
-				driver->LockNodes();
+				LockGuard LG(driver->m_nodeMutex);
 				if( ValueList* value = static_cast<ValueList*>( driver->GetValue( _id ) ) )
 				{
 					o_value->clear();
@@ -2319,7 +2525,6 @@ bool Manager::GetValueListItems
 				} else {
 					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueListItems");
 				}
-				driver->ReleaseNodes();
 			}
 		} else {
 			OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to GetValueListItems is not a List Value");
@@ -2328,6 +2533,43 @@ bool Manager::GetValueListItems
 
 	return res;
 }
+
+//-----------------------------------------------------------------------------
+// <Manager::GetValueListValues>
+// Gets the list of values from a list value
+//-----------------------------------------------------------------------------
+bool Manager::GetValueListValues
+(
+		ValueID const& _id,
+		vector<int32>* o_value
+)
+{
+	bool res = false;
+
+	if( o_value )
+	{
+		if( ValueID::ValueType_List == _id.GetType() )
+		{
+			if( Driver* driver = GetDriver( _id.GetHomeId() ) )
+			{
+				LockGuard LG(driver->m_nodeMutex);
+				if( ValueList* value = static_cast<ValueList*>( driver->GetValue( _id ) ) )
+				{
+					o_value->clear();
+					res = value->GetItemValues( o_value );
+					value->Release();
+				} else {
+					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueListValues");
+				}
+			}
+		} else {
+			OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to GetValueListValues is not a List Value");
+		}
+	}
+
+	return res;
+}
+
 
 //-----------------------------------------------------------------------------
 // <Manager::GetValueFloatPrecision>
@@ -2347,7 +2589,7 @@ bool Manager::GetValueFloatPrecision
 		{
 			if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 			{
-				driver->LockNodes();
+				LockGuard LG(driver->m_nodeMutex);
 				if( ValueDecimal* value = static_cast<ValueDecimal*>( driver->GetValue( _id ) ) )
 				{
 					*o_value = value->GetPrecision();
@@ -2356,7 +2598,6 @@ bool Manager::GetValueFloatPrecision
 				} else {
 					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetValueFloatPrecision");
 				}
-				driver->ReleaseNodes();
 			}
 		} else {
 			OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to GetValueFloatPrecision is not a Decimal Value");
@@ -2382,9 +2623,9 @@ bool Manager::SetValue
 	{
 		if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 		{
-			if( _id.GetNodeId() != driver->GetNodeId() )
+			if( _id.GetNodeId() != driver->GetControllerNodeId() )
 			{
-				driver->LockNodes();
+				LockGuard LG(driver->m_nodeMutex);
 				if( ValueBool* value = static_cast<ValueBool*>( driver->GetValue( _id ) ) )
 				{
 					res = value->Set( _value );
@@ -2392,7 +2633,6 @@ bool Manager::SetValue
 				} else {
 					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to SetValue");
 				}
-				driver->ReleaseNodes();
 			}
 		}
 	} else {
@@ -2418,9 +2658,9 @@ bool Manager::SetValue
 	{
 		if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 		{
-			if( _id.GetNodeId() != driver->GetNodeId() )
+			if( _id.GetNodeId() != driver->GetControllerNodeId() )
 			{
-				driver->LockNodes();
+				LockGuard LG(driver->m_nodeMutex);
 				if( ValueByte* value = static_cast<ValueByte*>( driver->GetValue( _id ) ) )
 				{
 					res = value->Set( _value );
@@ -2428,7 +2668,6 @@ bool Manager::SetValue
 				} else {
 					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to SetValue");
 				}
-				driver->ReleaseNodes();
 			}
 		}
 	} else {
@@ -2454,9 +2693,9 @@ bool Manager::SetValue
 	{
 		if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 		{
-			if( _id.GetNodeId() != driver->GetNodeId() )
+			if( _id.GetNodeId() != driver->GetControllerNodeId() )
 			{
-				driver->LockNodes();
+				LockGuard LG(driver->m_nodeMutex);
 				if( ValueDecimal* value = static_cast<ValueDecimal*>( driver->GetValue( _id ) ) )
 				{
 					char str[256];
@@ -2484,7 +2723,6 @@ bool Manager::SetValue
 				} else {
 					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to SetValue");
 				}
-				driver->ReleaseNodes();
 			}
 		}
 	} else {
@@ -2510,9 +2748,9 @@ bool Manager::SetValue
 	{
 		if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 		{
-			if( _id.GetNodeId() != driver->GetNodeId() )
+			if( _id.GetNodeId() != driver->GetControllerNodeId() )
 			{
-				driver->LockNodes();
+				LockGuard LG(driver->m_nodeMutex);
 				if( ValueInt* value = static_cast<ValueInt*>( driver->GetValue( _id ) ) )
 				{
 					res = value->Set( _value );
@@ -2520,7 +2758,6 @@ bool Manager::SetValue
 				} else {
 					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to SetValue");
 				}
-				driver->ReleaseNodes();
 			}
 		}
 	} else {
@@ -2547,9 +2784,9 @@ bool Manager::SetValue
 	{
 		if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 		{
-			if( _id.GetNodeId() != driver->GetNodeId() )
+			if( _id.GetNodeId() != driver->GetControllerNodeId() )
 			{
-				driver->LockNodes();
+				LockGuard LG(driver->m_nodeMutex);
 				if( ValueRaw* value = static_cast<ValueRaw*>( driver->GetValue( _id ) ) )
 				{
 					res = value->Set( _value, _length );
@@ -2557,7 +2794,6 @@ bool Manager::SetValue
 				} else {
 					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to SetValue");
 				}
-				driver->ReleaseNodes();
 			}
 		}
 	} else {
@@ -2583,9 +2819,9 @@ bool Manager::SetValue
 	{
 		if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 		{
-			if( _id.GetNodeId() != driver->GetNodeId() )
+			if( _id.GetNodeId() != driver->GetControllerNodeId() )
 			{
-				driver->LockNodes();
+				LockGuard LG(driver->m_nodeMutex);
 				if( ValueShort* value = static_cast<ValueShort*>( driver->GetValue( _id ) ) )
 				{
 					res = value->Set( _value );
@@ -2593,7 +2829,6 @@ bool Manager::SetValue
 				} else {
 					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to SetValue");
 				}
-				driver->ReleaseNodes();
 			}
 		}
 	} else {
@@ -2619,9 +2854,9 @@ bool Manager::SetValueListSelection
 	{
 		if( Driver* driver = GetDriver( _id.GetHomeId() ) )		
 		{
-			if( _id.GetNodeId() != driver->GetNodeId() )
+			if( _id.GetNodeId() != driver->GetControllerNodeId() )
 			{
-				driver->LockNodes();
+				LockGuard LG(driver->m_nodeMutex);
 				if( ValueList* value = static_cast<ValueList*>( driver->GetValue( _id ) ) )
 				{
 					res = value->SetByLabel( _selectedItem );
@@ -2629,7 +2864,6 @@ bool Manager::SetValueListSelection
 				} else {
 					OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to SetValueListSelection");
 				}
-				driver->ReleaseNodes();
 			}
 
 		}
@@ -2654,9 +2888,9 @@ bool Manager::SetValue
 
 	if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 	{
-		if( _id.GetNodeId() != driver->GetNodeId() )
+		if( _id.GetNodeId() != driver->GetControllerNodeId() )
 		{
-			driver->LockNodes();
+			LockGuard LG(driver->m_nodeMutex);
 
 			switch( _id.GetType() )
 			{
@@ -2771,7 +3005,6 @@ bool Manager::SetValue
 					break;
 				}
 			}
-			driver->ReleaseNodes();
 		}
 	}
 	return res;
@@ -2793,26 +3026,26 @@ bool Manager::RefreshValue
 	{
 	    Node *node;
 
-	    // Need to lock and unlock nodes to check this information
-	    driver->LockNodes();
+		// Need to lock and unlock nodes to check this information
+		LockGuard LG(driver->m_nodeMutex);
 
-	    if( (node = driver->GetNodeUnsafe( _id.GetNodeId() ) ) != NULL)
-	    {
+		if( (node = driver->GetNode( _id.GetNodeId() ) ) != NULL)
+		{
 			CommandClass* cc = node->GetCommandClass( _id.GetCommandClassId() );
 			if (cc) {
-        			uint8 index = _id.GetIndex();
-	        		uint8 instance = _id.GetInstance();
-		        	Log::Write( LogLevel_Info, "mgr,     Refreshing node %d: %s index = %d instance = %d (to confirm a reported change)", node->m_nodeId, cc->GetCommandClassName().c_str(), index, instance );
-		        	cc->RequestValue( 0, index, instance, _poll ? Driver::MsgQueue_Poll : Driver::MsgQueue_Send );
-        			bRet = true;
-            } else {
-       				OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to RefreshValue");
-       				bRet = false;
-            }
+				uint8 index = _id.GetIndex();
+				uint8 instance = _id.GetInstance();
+				Log::Write( LogLevel_Info, "mgr,     Refreshing node %d: %s index = %d instance = %d (to confirm a reported change)", node->m_nodeId, cc->GetCommandClassName().c_str(), index, instance );
+				cc->RequestValue( 0, index, instance, Driver::MsgQueue_Send );
+				bRet = true;
+			} else {
+				OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to RefreshValue");
+				bRet = false;
+			}
 		}
-		driver->ReleaseNodes();
 	}
 	return bRet;
+
 }
 
 //-----------------------------------------------------------------------------
@@ -2827,7 +3060,7 @@ void Manager::SetChangeVerified
 {
 	if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 	{
-		driver->LockNodes();
+		LockGuard LG(driver->m_nodeMutex);
 		if( Value* value = driver->GetValue( _id ) )
 		{
 			value->SetChangeVerified( _verify );
@@ -2835,7 +3068,6 @@ void Manager::SetChangeVerified
 		} else {
 			OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to SetChangeVerified");
 		}
-		driver->ReleaseNodes();
 	}
 }
 
@@ -2872,7 +3104,7 @@ bool Manager::GetChangeVerified
 	bool res = false;
 	if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 	{
-		driver->LockNodes();
+		LockGuard LG(driver->m_nodeMutex);
 		if( Value* value = driver->GetValue( _id ) )
 		{
 			res = value->GetChangeVerified();
@@ -2880,7 +3112,6 @@ bool Manager::GetChangeVerified
 		} else {
 			OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetChangeVerified");
 		}
-		driver->ReleaseNodes();
 	}
 	return res;
 }
@@ -2901,7 +3132,7 @@ bool Manager::PressButton
 	{
 		if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 		{
-			driver->LockNodes();
+			LockGuard LG(driver->m_nodeMutex);
 			if( ValueButton* value = static_cast<ValueButton*>( driver->GetValue( _id ) ) )
 			{
 				res = value->PressButton();
@@ -2909,7 +3140,6 @@ bool Manager::PressButton
 			} else {
 				OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to PressButton");
 			}
-			driver->ReleaseNodes();
 		}
 	} else {
 		OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to PressButton is not a Button Value");
@@ -2933,7 +3163,7 @@ bool Manager::ReleaseButton
 	{
 		if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 		{
-			driver->LockNodes();
+			LockGuard LG(driver->m_nodeMutex);
 			if( ValueButton* value = static_cast<ValueButton*>( driver->GetValue( _id ) ) )
 			{
 				res = value->ReleaseButton();
@@ -2941,7 +3171,6 @@ bool Manager::ReleaseButton
 			} else {
 				OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to ReleaseButton");
 			}
-			driver->ReleaseNodes();
 		}
 	} else {
 		OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to ReleaseButton is not a Button Value");
@@ -2970,7 +3199,7 @@ uint8 Manager::GetNumSwitchPoints
 	{
 		if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 		{
-			driver->LockNodes();
+			LockGuard LG(driver->m_nodeMutex);
 			if( ValueSchedule* value = static_cast<ValueSchedule*>( driver->GetValue( _id ) ) )
 			{
 				numSwitchPoints = value->GetNumSwitchPoints();
@@ -2978,7 +3207,6 @@ uint8 Manager::GetNumSwitchPoints
 			} else {
 				OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetNumSwitchPoints");
 			}
-			driver->ReleaseNodes();
 		}
 	} else {
 		OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to GetNumSwitchPoints is not a Schedule Value");
@@ -3005,7 +3233,7 @@ bool Manager::SetSwitchPoint
 	{
 		if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 		{
-			driver->LockNodes();
+			LockGuard LG(driver->m_nodeMutex);
 			if( ValueSchedule* value = static_cast<ValueSchedule*>( driver->GetValue( _id ) ) )
 			{
 				res = value->SetSwitchPoint( _hours, _minutes, _setback );
@@ -3013,7 +3241,6 @@ bool Manager::SetSwitchPoint
 			} else {
 				OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to SetSwitchPoint");
 			}
-			driver->ReleaseNodes();
 		}
 	} else {
 		OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to SetSwitchPoint is not a Schedule Value");
@@ -3039,7 +3266,7 @@ bool Manager::RemoveSwitchPoint
 	{
 		if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 		{
-			driver->LockNodes();
+			LockGuard LG(driver->m_nodeMutex);
 			if( ValueSchedule* value = static_cast<ValueSchedule*>( driver->GetValue( _id ) ) )
 			{
 				uint8 idx;
@@ -3053,7 +3280,6 @@ bool Manager::RemoveSwitchPoint
 			} else {
 				OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to RemoveSwitchPoint");
 			}
-			driver->ReleaseNodes();
 		}
 	} else {
 		OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to RemoveSwitchPoint is not a Schedule Value");
@@ -3075,7 +3301,7 @@ void Manager::ClearSwitchPoints
 	{
 		if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 		{
-			driver->LockNodes();
+			LockGuard LG(driver->m_nodeMutex);
 			if( ValueSchedule* value = static_cast<ValueSchedule*>( driver->GetValue( _id ) ) )
 			{
 				value->ClearSwitchPoints();
@@ -3083,7 +3309,6 @@ void Manager::ClearSwitchPoints
 			} else {
 				OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to ClearSwitchPoints");
 			}
-			driver->ReleaseNodes();
 		}
 	} else {
 		OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to ClearSwitchPoints is not a Schedule Value");
@@ -3109,7 +3334,7 @@ bool Manager::GetSwitchPoint
 	{
 		if( Driver* driver = GetDriver( _id.GetHomeId() ) )
 		{
-			driver->LockNodes();
+			LockGuard LG(driver->m_nodeMutex);
 			if( ValueSchedule* value = static_cast<ValueSchedule*>( driver->GetValue( _id ) ) )
 			{
 				res = value->GetSwitchPoint( _idx, o_hours, o_minutes, o_setback );
@@ -3117,7 +3342,6 @@ bool Manager::GetSwitchPoint
 			} else {
 				OZW_ERROR(OZWException::OZWEXCEPTION_INVALID_VALUEID, "Invalid ValueID passed to GetSwitchPoint");
 			}
-			driver->ReleaseNodes();
 		}
 	} else {
 		OZW_ERROR(OZWException::OZWEXCEPTION_CANNOT_CONVERT_VALUEID, "ValueID passed to GetSwitchPoint is not a Schedule Value");
@@ -3215,11 +3439,11 @@ void Manager::RequestAllConfigParams
 {
 	if( Driver* driver = GetDriver( _homeId ) )
 	{
+		LockGuard LG(driver->m_nodeMutex);
 		Node* node = driver->GetNode( _nodeId );
 		if( node )
 		{
 			node->SetQueryStage( Node::QueryStage_Configuration );
-			driver->ReleaseNodes();
 		}
 	}
 }
@@ -3256,6 +3480,26 @@ uint32 Manager::GetAssociations
 	uint8 const _nodeId,
 	uint8 const _groupIdx,
 	uint8** o_associations
+)
+{
+	if( Driver* driver = GetDriver( _homeId ) )
+	{
+		return driver->GetAssociations( _nodeId, _groupIdx, o_associations );
+	}
+
+	return 0;
+}
+
+//-----------------------------------------------------------------------------
+// <Manager::GetAssociations>
+// Gets the associations for a group
+//-----------------------------------------------------------------------------
+uint32 Manager::GetAssociations
+(
+		uint32 const _homeId,
+		uint8 const _nodeId,
+		uint8 const _groupIdx,
+		InstanceAssociation** o_associations
 )
 {
 	if( Driver* driver = GetDriver( _homeId ) )
@@ -3313,12 +3557,13 @@ void Manager::AddAssociation
 	uint32 const _homeId,
 	uint8 const _nodeId,
 	uint8 const _groupIdx,
-	uint8 const _targetNodeId
+	uint8 const _targetNodeId,
+	uint8 const _instance
 )
 {
 	if( Driver* driver = GetDriver( _homeId ) )
 	{
-		driver->AddAssociation( _nodeId, _groupIdx, _targetNodeId );
+		driver->AddAssociation( _nodeId, _groupIdx, _targetNodeId, _instance );
 	}
 }
 
@@ -3331,12 +3576,13 @@ void Manager::RemoveAssociation
 	uint32 const _homeId,
 	uint8 const _nodeId,
 	uint8 const _groupIdx,
-	uint8 const _targetNodeId
+	uint8 const _targetNodeId,
+	uint8 const _instance
 )
 {
 	if( Driver* driver = GetDriver( _homeId ) )
 	{
-		driver->RemoveAssociation( _nodeId, _groupIdx, _targetNodeId );
+		driver->RemoveAssociation( _nodeId, _groupIdx, _targetNodeId, _instance );
 	}
 }
 
@@ -3547,15 +3793,30 @@ void Manager::HealNetworkNode
 {
 	if( Driver* driver = GetDriver( _homeId ) )
 	{
+		LockGuard LG(driver->m_nodeMutex);
 		Node* node = driver->GetNode( _nodeId );
 		if( node )
 		{
+			if( !node->IsListeningDevice() )
+			{
+				Log::Write( LogLevel_Detail, node->GetNodeId(),  "HealNetwork: is not a listening device");
+				if( WakeUp* wakeUp = static_cast<WakeUp*>( node->GetCommandClass( WakeUp::StaticGetCommandClassId() ) ) )
+				{
+				//if( !wakeUp->IsAwake() )
+					{
+						Log::Write( LogLevel_Detail, node->GetNodeId(), "HealNetwork: node not awake, marking in Wakeup");
+						wakeUp->SetNeighborUpdatePending();
+						return;
+					}
+					//Log::Write( LogLevel_Detail, node->GetNodeId(), "HealNetwork: Node is awake");
+				}
+			}
+			
 			driver->BeginControllerCommand( Driver::ControllerCommand_RequestNodeNeighborUpdate, NULL, NULL, true, _nodeId, 0 );
 			if( _doRR )
 			{
 				driver->UpdateNodeRoutes( _nodeId, true );
 			}
-			driver->ReleaseNodes();
 		}
 	}
 }
@@ -3572,21 +3833,343 @@ void Manager::HealNetwork
 {
 	if( Driver* driver = GetDriver( _homeId ) )
 	{
-		driver->LockNodes();
-		for( uint8 i=0; i<255; i++ )
-		{
+		LockGuard LG(driver->m_nodeMutex);
+		for( uint8 i=0; i<255; i++ ) {
+			Node* node = driver->GetNode( i );
+			if( node )
+			{
+				if( !node->IsListeningDevice() )
+				{
+					Log::Write( LogLevel_Detail, node->GetNodeId(),  "HealNetwork: is not a listening device");
+					if( WakeUp* wakeUp = static_cast<WakeUp*>( node->GetCommandClass( WakeUp::StaticGetCommandClassId() ) ) )
+					{
+					//if( !wakeUp->IsAwake() )
+						{
+							Log::Write( LogLevel_Detail, node->GetNodeId(), "HealNetwork: node not awake, marking in Wakeup");
+							wakeUp->SetNeighborUpdatePending();
+							continue;
+						}
+					//Log::Write( LogLevel_Detail, node->GetNodeId(), "HealNetwork: Node is awake");
+					}
+				}
+			}
+
 			if( driver->m_nodes[i] != NULL )
 			{
-			  driver->BeginControllerCommand( Driver::ControllerCommand_RequestNodeNeighborUpdate, NULL, NULL, true, i, 0 );
+				driver->BeginControllerCommand( Driver::ControllerCommand_RequestNodeNeighborUpdate, NULL, NULL, true, i, 0 );
 				if( _doRR )
 				{
 					driver->UpdateNodeRoutes( i, true );
 				}
 			}
 		}
-		driver->ReleaseNodes();
 	}
 }
+
+//-----------------------------------------------------------------------------
+// <Manager::AddNode>
+// Add a Device to the Network.
+//-----------------------------------------------------------------------------
+bool Manager::AddNode
+(
+		uint32 const _homeId, bool _doSecurity
+)
+{
+	if (Driver *driver = GetDriver( _homeId ) ) {
+		LockGuard LG(driver->m_nodeMutex);
+		/* we use the Args option to communicate if Security CC should be initialized */
+		return driver->BeginControllerCommand(
+				Driver::ControllerCommand_AddDevice,
+				NULL, NULL, true, 0, (_doSecurity  == true ? 1 : 0));
+	}
+	return false;
+}
+
+//-----------------------------------------------------------------------------
+// <Manager::RemoveNode>
+// Remove a Device from the Network.
+//-----------------------------------------------------------------------------
+bool Manager::RemoveNode
+(
+		uint32 const _homeId
+)
+{
+	if (Driver *driver = GetDriver( _homeId ) ) {
+		LockGuard LG(driver->m_nodeMutex);
+		return driver->BeginControllerCommand(
+				Driver::ControllerCommand_RemoveDevice,
+				NULL, NULL, true, 0, 0);
+	}
+	return false;
+}
+
+//-----------------------------------------------------------------------------
+// <Manager::RemoveFailedNode>
+// Remove a Specific Device from the network if its non-responsive.
+//-----------------------------------------------------------------------------
+bool Manager::RemoveFailedNode
+(
+		uint32 const _homeId,
+		uint8 const _nodeId
+)
+{
+	if (Driver *driver = GetDriver( _homeId ) ) {
+		LockGuard LG(driver->m_nodeMutex);
+		return driver->BeginControllerCommand(
+				Driver::ControllerCommand_RemoveFailedNode,
+				NULL, NULL, true, _nodeId, 0);
+	}
+	return false;
+}
+
+//-----------------------------------------------------------------------------
+// <Manager::HasNodeFailed>
+// Test if the Controller Believes the Node has Failed.
+//-----------------------------------------------------------------------------
+bool Manager::HasNodeFailed
+(
+		uint32 const _homeId,
+		uint8 const _nodeId
+)
+{
+	if (Driver *driver = GetDriver( _homeId ) ) {
+		LockGuard LG(driver->m_nodeMutex);
+		return driver->BeginControllerCommand(
+				Driver::ControllerCommand_HasNodeFailed,
+				NULL, NULL, true, _nodeId, 0);
+	}
+	return false;
+}
+
+//-----------------------------------------------------------------------------
+// <Manager::AssignReturnRoute>
+// Ask a Node to update its Return Route to the Controller
+//-----------------------------------------------------------------------------
+bool Manager::AssignReturnRoute
+(
+		uint32 const _homeId,
+		uint8 const _nodeId
+)
+{
+	if (Driver *driver = GetDriver( _homeId ) ) {
+		LockGuard LG(driver->m_nodeMutex);
+		return driver->BeginControllerCommand(
+				Driver::ControllerCommand_AssignReturnRoute,
+				NULL, NULL, true, _nodeId, 0);
+	}
+	return false;
+}
+
+//-----------------------------------------------------------------------------
+// <Manager::RequestNodeNeighborUpdate>
+// Ask a Node to update its Neighbor Table.
+//-----------------------------------------------------------------------------
+bool Manager::RequestNodeNeighborUpdate
+(
+		uint32 const _homeId,
+		uint8 const _nodeId
+)
+{
+	if (Driver *driver = GetDriver( _homeId ) ) {
+		LockGuard LG(driver->m_nodeMutex);
+		return driver->BeginControllerCommand(
+				Driver::ControllerCommand_RequestNodeNeighborUpdate,
+				NULL, NULL, true, _nodeId, 0);
+	}
+	return false;
+}
+
+
+//-----------------------------------------------------------------------------
+// <Manager::DeleteAllReturnRoutes>
+// Ask a Node to delete all its Return Routes
+//-----------------------------------------------------------------------------
+bool Manager::DeleteAllReturnRoutes
+(
+		uint32 const _homeId,
+		uint8 const _nodeId
+)
+{
+	if (Driver *driver = GetDriver( _homeId ) ) {
+		LockGuard LG(driver->m_nodeMutex);
+		return driver->BeginControllerCommand(
+				Driver::ControllerCommand_DeleteAllReturnRoutes,
+				NULL, NULL, true, _nodeId, 0);
+	}
+	return false;
+}
+
+//-----------------------------------------------------------------------------
+// <Manager::SendNodeInformation>
+// Send a NIF frame from the Controller to the Node
+//-----------------------------------------------------------------------------
+bool Manager::SendNodeInformation
+(
+		uint32 const _homeId,
+		uint8 const _nodeId
+)
+{
+	if (Driver *driver = GetDriver( _homeId ) ) {
+		LockGuard LG(driver->m_nodeMutex);
+		return driver->BeginControllerCommand(
+				Driver::ControllerCommand_SendNodeInformation,
+				NULL, NULL, true, _nodeId, 0);
+	}
+	return false;
+}
+
+//-----------------------------------------------------------------------------
+// <Manager::CreateNewPrimary>
+// Send a NIF frame from the Controller to the Node
+//-----------------------------------------------------------------------------
+bool Manager::CreateNewPrimary
+(
+		uint32 const _homeId
+)
+{
+	if (Driver *driver = GetDriver( _homeId ) ) {
+		LockGuard LG(driver->m_nodeMutex);
+		return driver->BeginControllerCommand(
+				Driver::ControllerCommand_CreateNewPrimary,
+				NULL, NULL, true, 0, 0);
+	}
+	return false;
+}
+
+//-----------------------------------------------------------------------------
+// <Manager::ReceiveConfiguration>
+// Send a NIF frame from the Controller to the Node
+//-----------------------------------------------------------------------------
+bool Manager::ReceiveConfiguration
+(
+		uint32 const _homeId
+)
+{
+	if (Driver *driver = GetDriver( _homeId ) ) {
+		LockGuard LG(driver->m_nodeMutex);
+		return driver->BeginControllerCommand(
+				Driver::ControllerCommand_ReceiveConfiguration,
+				NULL, NULL, true, 0, 0);
+	}
+	return false;
+}
+
+//-----------------------------------------------------------------------------
+// <Manager::ReplaceFailedNode>
+// Send a NIF frame from the Controller to the Node
+//-----------------------------------------------------------------------------
+bool Manager::ReplaceFailedNode
+(
+		uint32 const _homeId,
+		uint8 const _nodeId
+)
+{
+	if (Driver *driver = GetDriver( _homeId ) ) {
+		LockGuard LG(driver->m_nodeMutex);
+		return driver->BeginControllerCommand(
+				Driver::ControllerCommand_ReplaceFailedNode,
+				NULL, NULL, true, _nodeId, 0);
+	}
+	return false;
+}
+
+//-----------------------------------------------------------------------------
+// <Manager::TransferPrimaryRole>
+// Send a NIF frame from the Controller to the Node
+//-----------------------------------------------------------------------------
+bool Manager::TransferPrimaryRole
+(
+		uint32 const _homeId
+)
+{
+	if (Driver *driver = GetDriver( _homeId ) ) {
+		LockGuard LG(driver->m_nodeMutex);
+		return driver->BeginControllerCommand(
+				Driver::ControllerCommand_TransferPrimaryRole,
+				NULL, NULL, true, 0, 0);
+	}
+	return false;
+}
+
+//-----------------------------------------------------------------------------
+// <Manager::RequestNetworkUpdate>
+// Send a NIF frame from the Controller to the Node
+//-----------------------------------------------------------------------------
+bool Manager::RequestNetworkUpdate
+(
+		uint32 const _homeId,
+		uint8 const _nodeId
+)
+{
+	if (Driver *driver = GetDriver( _homeId ) ) {
+		LockGuard LG(driver->m_nodeMutex);
+		return driver->BeginControllerCommand(
+				Driver::ControllerCommand_RequestNetworkUpdate,
+				NULL, NULL, true, _nodeId, 0);
+	}
+	return false;
+}
+
+//-----------------------------------------------------------------------------
+// <Manager::ReplicationSend>
+// Send a NIF frame from the Controller to the Node
+//-----------------------------------------------------------------------------
+bool Manager::ReplicationSend
+(
+		uint32 const _homeId,
+		uint8 const _nodeId
+)
+{
+	if (Driver *driver = GetDriver( _homeId ) ) {
+		LockGuard LG(driver->m_nodeMutex);
+		return driver->BeginControllerCommand(
+				Driver::ControllerCommand_ReplicationSend,
+				NULL, NULL, true, _nodeId, 0);
+	}
+	return false;
+}
+
+//-----------------------------------------------------------------------------
+// <Manager::CreateButton>
+// Send a NIF frame from the Controller to the Node
+//-----------------------------------------------------------------------------
+bool Manager::CreateButton
+(
+		uint32 const _homeId,
+		uint8 const _nodeId,
+		uint8 const _buttonid
+)
+{
+	if (Driver *driver = GetDriver( _homeId ) ) {
+		LockGuard LG(driver->m_nodeMutex);
+		return driver->BeginControllerCommand(
+				Driver::ControllerCommand_CreateButton,
+				NULL, NULL, true, _nodeId, _buttonid);
+	}
+	return false;
+}
+
+//-----------------------------------------------------------------------------
+// <Manager::DeleteButton>
+// Send a NIF frame from the Controller to the Node
+//-----------------------------------------------------------------------------
+bool Manager::DeleteButton
+(
+		uint32 const _homeId,
+		uint8 const _nodeId,
+		uint8 const _buttonid
+)
+{
+	if (Driver *driver = GetDriver( _homeId ) ) {
+		LockGuard LG(driver->m_nodeMutex);
+		return driver->BeginControllerCommand(
+				Driver::ControllerCommand_DeleteButton,
+				NULL, NULL, true, _nodeId, _buttonid);
+	}
+	return false;
+}
+
+
 
 //-----------------------------------------------------------------------------
 // <Manager::GetNumScenes>

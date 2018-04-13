@@ -32,11 +32,16 @@
 #include "Msg.h"
 #include "Notification.h"
 #include "Scene.h"
+#include "ZWSecurity.h"
 
 #include "platform/Event.h"
 #include "platform/Mutex.h"
 #include "platform/SerialController.h"
+#ifdef WINRT
+#include "platform/winRT/HidControllerWinRT.h"
+#else
 #include "platform/HidController.h"
+#endif
 #include "platform/Thread.h"
 #include "platform/Log.h"
 #include "platform/TimeStamp.h"
@@ -136,9 +141,8 @@ Driver::Driver
 		string const& _controllerPath,
 		ControllerInterface const& _interface
 ):
-//	m_securityEvent( new Event() ),
-//	m_waitingForKey( 0 ),
 m_driverThread( new Thread( "driver" ) ),
+m_initMutex(new Mutex()),
 m_exit( false ),
 m_init( false ),
 m_awakeNodesQueried( false ),
@@ -157,6 +161,7 @@ m_productId ( 0 ),
 m_initVersion( 0 ),
 m_initCaps( 0 ),
 m_controllerCaps( 0 ),
+m_Controller_nodeId( 0 ),
 m_nodeMutex( new Mutex() ),
 m_controllerReplication( NULL ),
 m_transmitOptions( TRANSMIT_OPTION_ACK | TRANSMIT_OPTION_AUTO_ROUTE | TRANSMIT_OPTION_EXPLORE ),
@@ -196,7 +201,10 @@ m_notidle( 0 ),
 m_nondelivery( 0 ),
 m_routedbusy( 0 ),
 m_broadcastReadCnt( 0 ),
-m_broadcastWriteCnt( 0 )
+m_broadcastWriteCnt( 0 ),
+m_nonceReportSent( 0 ),
+m_nonceReportSentAttempt( 0 ),
+m_waitingForNetworkUpdate(false)
 {
 	// set a timestamp to indicate when this driver started
 	TimeStamp m_startTime;
@@ -213,6 +221,10 @@ m_broadcastWriteCnt( 0 )
 	// Clear the virtual neighbors array
 	memset( m_virtualNeighbors, 0, NUM_NODE_BITFIELD_BYTES );
 
+	// Initilize the Network Keys
+
+	initNetworkKeys(false);
+	
 #if 0
 	if( ControllerInterface_Hid == _interface )
 	{
@@ -238,6 +250,7 @@ Driver::~Driver
 (
 )
 {
+
 	/* Signal that we are going away... so at least Apps know... */
 	Notification* notification = new Notification( Notification::Type_DriverRemoved );
 	notification->SetHomeAndNodeIds( m_homeId, 0 );
@@ -262,7 +275,9 @@ Driver::~Driver
 	// The order of the statements below has been achieved by mitigating freed memory
 	//references using a memory allocator checker. Do not rearrange unless you are
 	//certain memory won't be referenced out of order. --Greg Satz, April 2010
+	m_initMutex->Lock();
 	m_exit = true;
+	m_initMutex->Unlock();
 
 	m_pollThread->Stop();
 	m_pollThread->Release();
@@ -275,28 +290,30 @@ Driver::~Driver
 	m_controller->Close();
 	m_controller->Release();
 
+	m_initMutex->Release();
+
 	if( m_currentMsg != NULL )
 	{
 		RemoveCurrentMsg();
 	}
 
-  // Clear the node data
-  LockNodes();
-  for( int i=0; i<256; ++i )
-  {
-    if( GetNodeUnsafe( i ) )
-    {
-      delete m_nodes[i];
-      m_nodes[i] = NULL;
-      Notification* notification = new Notification( Notification::Type_NodeRemoved );
-      notification->SetHomeAndNodeIds( m_homeId, i );
-      QueueNotification( notification );
-    }
-  }
-  ReleaseNodes();
-
-  // Don't release until all nodes have removed their poll values
-  m_pollMutex->Release();
+	// Clear the node data
+	{
+		LockGuard LG(m_nodeMutex);
+		for( int i=0; i<256; ++i )
+		{
+			if( GetNodeUnsafe( i ) )
+			{
+				delete m_nodes[i];
+				m_nodes[i] = NULL;
+				Notification* notification = new Notification( Notification::Type_NodeRemoved );
+				notification->SetHomeAndNodeIds( m_homeId, i );
+				QueueNotification( notification );
+			}
+		}
+	}
+	// Don't release until all nodes have removed their poll values
+	m_pollMutex->Release();
 
   // Clear the send Queue
   for( int32 i=0; i<MsgQueue_Count; ++i )
@@ -333,10 +350,12 @@ Driver::~Driver
 			NotifyWatchers();
 		}
 	}
+
+	if (m_controllerReplication)
+		delete m_controllerReplication;
+	
 	m_notificationsEvent->Release();
 	m_nodeMutex->Release();
-
-  delete m_controllerReplication;
 }
 
 //-----------------------------------------------------------------------------
@@ -400,6 +419,7 @@ void Driver::DriverThreadProc
 			int retryTimeout = RETRY_TIMEOUT;
 			Options::Get()->GetOptionAsInt( "RetryTimeout", &retryTimeout );
 
+			//retryTimeout = RETRY_TIMEOUT * 10;
 			while( true )
 			{
 				Log::Write( LogLevel_StreamDetail, "      Top of DriverThreadProc loop." );
@@ -408,10 +428,12 @@ void Driver::DriverThreadProc
 
 				// If we're waiting for a message to complete, we can only
 				// handle incoming data, notifications and exit events.
-				if( m_waitingForAck || m_expectedCallbackId || m_expectedReply )
+				if( m_waitingForAck || m_expectedCallbackId || m_expectedReply || m_waitingForNetworkUpdate)
 				{
+					//Log::Write(LogLevel_Info, "Waiting for completetion: ack: %d callback: %d reply: %d network update %d",
+					//					 m_waitingForAck, m_expectedCallbackId, m_expectedReply, m_waitingForNetworkUpdate);
 					count = 3;
-					timeout = m_waitingForAck ? ACK_TIMEOUT : retryTimeStamp.TimeRemaining();
+					timeout = (m_waitingForAck | m_waitingForNetworkUpdate) ? ACK_TIMEOUT : retryTimeStamp.TimeRemaining();
 					if( timeout < 0 )
 					{
 						timeout = 0;
@@ -427,7 +449,9 @@ void Driver::DriverThreadProc
         }
 
 				// Wait for something to do
+				//Log::Write(LogLevel_Info, "Wait here: %d %d\n", count, timeout);
 				int32 res = Wait::Multiple( waitObjects, count, timeout );
+				//Log::Write(LogLevel_Info, "Result: %d\n", res);
 
 				switch( res )
 				{
@@ -441,12 +465,9 @@ void Driver::DriverThreadProc
 							notification->SetNotification( Notification::Code_Timeout );
 							QueueNotification( notification );
 						}
-
 					 if( WriteMsg( "Wait Timeout" ) )
 					 {
-							bool security = m_currentMsg ? m_currentMsg->GetSecurity() : false;
-                
-							retryTimeStamp.SetTime( security ? (retryTimeout * 2) : retryTimeout );
+							retryTimeStamp.SetTime(retryTimeout);
 						}
 						break;
 					}
@@ -455,13 +476,6 @@ void Driver::DriverThreadProc
 						// Exit has been signalled
 						return;
 					}
-/*          case 1:
-          {
-            Log::Write(LogLevel_Info, "Security Event - Network key verified");
-            m_securityEvent->Reset();
-            m_waitingForKey = false;
-            break; 
-          }*/
 					case 1:
 					{
 						// Notifications are waiting to be sent
@@ -481,8 +495,7 @@ void Driver::DriverThreadProc
 						
 						if( WriteNextMsg( queue ))
 						{
-              retryTimeStamp.SetTime(retryTimeout);
-							//retryTimeStamp.SetTime( (queue == MsgQueue_Security) ? (retryTimeout * 2) : retryTimeout );
+							retryTimeStamp.SetTime(retryTimeout);
 						}
 						break;
 					}
@@ -532,7 +545,15 @@ bool Driver::Init
 		uint32 _attempts
 )
 {
-	m_nodeId = -1;
+	m_initMutex->Lock();
+
+	if (m_exit)
+	{
+		m_initMutex->Unlock();
+		return false;
+	}
+	
+	m_Controller_nodeId = -1;
 	m_waitingForAck = false;
 
 	// Open the controller
@@ -541,6 +562,7 @@ bool Driver::Init
 	if( !m_controller->Open( m_controllerPath ) )
 	{
 		Log::Write( LogLevel_Warning, "WARNING: Failed to init the controller (attempt %d)", _attempts );
+		m_initMutex->Unlock();
 		return false;
 	}
 
@@ -558,6 +580,8 @@ bool Driver::Init
 	//Msg* msg = new Msg( "FUNC_ID_ZW_SET_PROMISCUOUS_MODE", 0xff, REQUEST, FUNC_ID_ZW_SET_PROMISCUOUS_MODE, false, false );
 	//msg->Append( 0xff );
 	//SendMsg( msg );
+
+	m_initMutex->Unlock();
 	
 	// Init successful
 	return true;
@@ -632,13 +656,8 @@ bool Driver::ReadConfig
 
 	// Load the XML document that contains the driver configuration
 	string userPath;
-	//Options::Get()->GetOptionAsString( "UserPath", &userPath );
-//#if defined(__arm__) || defined(__mips__)
 	userPath = "/etc/openzwave/";
-//#else
 		//Options::Get()->GetOptionAsString( "UserPath", &userPath )
-//	Options::Get()->GetOptionAsString( "ConfigPath", &userPath );
-//#endif
 	
 	snprintf( str, sizeof(str), "zwcfg_0x%08x.xml", m_homeId );
 	string filename =  userPath + string(str);
@@ -680,7 +699,7 @@ bool Driver::ReadConfig
 	// Node ID
 	if( TIXML_SUCCESS == driverElement->QueryIntAttribute( "node_id", &intVal ) )
 	{
-		if( (uint8)intVal != m_nodeId )
+		if( (uint8)intVal != m_Controller_nodeId )
 		{
 			Log::Write( LogLevel_Warning, "WARNING: Driver::ReadConfig - Controller Node ID in file %s is incorrect", filename.c_str() );
 			return false;
@@ -717,7 +736,7 @@ bool Driver::ReadConfig
 	}
 
 	// Read the nodes
-	LockNodes();
+	LockGuard LG(m_nodeMutex);
 	TiXmlElement const* nodeElement = driverElement->FirstChildElement();
 	while( nodeElement )
 	{
@@ -743,8 +762,8 @@ bool Driver::ReadConfig
 		nodeElement = nodeElement->NextSiblingElement();
 	}
 	
-	ReleaseNodes();
-
+	LG.Unlock();
+	
 	// restore the previous state (for now, polling) for the nodes/values just retrieved
 	for( int i=0; i<256; i++ )
 	{
@@ -798,7 +817,7 @@ void Driver::WriteConfig
 	snprintf( str, sizeof(str), "0x%.8x", m_homeId );
 	driverElement->SetAttribute( "home_id", str );
 
-	snprintf( str, sizeof(str), "%d", m_nodeId );
+	snprintf( str, sizeof(str), "%d", m_Controller_nodeId );
 	driverElement->SetAttribute( "node_id", str );
 
 	snprintf( str, sizeof(str), "%d", m_initCaps );
@@ -810,19 +829,20 @@ void Driver::WriteConfig
 	snprintf( str, sizeof(str), "%d", m_pollInterval );
 	driverElement->SetAttribute( "poll_interval", str );
 
-	snprintf( str, sizeof(str), "%d", (int) m_bIntervalBetweenPolls );
+	snprintf( str, sizeof(str), "%s", m_bIntervalBetweenPolls ? "true" : "false" );
 	driverElement->SetAttribute( "poll_interval_between", str );
 
-	LockNodes();
-	for( int i=0; i<256; ++i )
 	{
-		if( m_nodes[i] )
+		LockGuard LG(m_nodeMutex);
+
+		for( int i=0; i<256; ++i )
 		{
-			m_nodes[i]->WriteXML( driverElement );
+			if( m_nodes[i] )
+			{
+				m_nodes[i]->WriteXML( driverElement );
+			}
 		}
 	}
-	ReleaseNodes();
-
 	string userPath;
 //#if defined(__arm__) || defined(__mips__)
 	userPath = "/etc/openzwave/";
@@ -867,36 +887,16 @@ Node* Driver::GetNode
 		uint8 _nodeId
 )
 {
-	LockNodes();
+	if (m_nodeMutex->IsSignalled()) {
+		Log::Write(LogLevel_Error, _nodeId, "Driver Thread is Not Locked during Call to GetNode");
+		return NULL;
+	}
 	if( Node* node = m_nodes[_nodeId] )
 	{
 		return node;
 	}
 
-	ReleaseNodes();
 	return NULL;
-}
-
-//-----------------------------------------------------------------------------
-// <Driver::LockNodes>
-// Lock the nodes so that no other thread can modify them
-//-----------------------------------------------------------------------------
-void Driver::LockNodes
-(
-)
-{
-	m_nodeMutex->Lock();
-}
-
-//-----------------------------------------------------------------------------
-// <Driver::ReleaseNodes>
-// Unlock the nodes so that other threads can modify them
-//-----------------------------------------------------------------------------
-void Driver::ReleaseNodes
-(
-)
-{
-	m_nodeMutex->Unlock();
 }
 
 //-----------------------------------------------------------------------------
@@ -920,6 +920,7 @@ void Driver::SendQueryStageComplete
 	item.m_queryStage = _stage;
 	item.m_retry = false;
 
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( _nodeId ) )
 	{
 		if( !node->IsListeningDevice() )
@@ -932,7 +933,6 @@ void Driver::SendQueryStageComplete
 					Log::Write( LogLevel_Info, "" );
 				  Log::Write( LogLevel_Detail, node->GetNodeId(), "Queuing (%s) Query Stage Complete (%s)", c_sendQueueNames[MsgQueue_WakeUp], node->GetQueryStageName( _stage ).c_str() );
 					wakeUp->QueueMsg( item );
-					ReleaseNodes();
 					return;
 				}
 			}
@@ -945,7 +945,6 @@ void Driver::SendQueryStageComplete
 		m_queueEvent[MsgQueue_Query]->Set();
 		m_sendMutex->Unlock();
 
-		ReleaseNodes();
 	}
 }
 
@@ -990,112 +989,81 @@ void Driver::SendMsg
 	// Polling items don't get any retries
 	if (_queue == MsgQueue_Poll) {
 		_msg->SetMaxSendAttempts(1);
-	} else if (_queue == MsgQueue_Security) {
-    _msg->SetMaxSendAttempts(6); 
-		_msg->SetSecurity(true);
 	}
-	
 	MsgQueueItem item;
   
 	item.m_command = MsgQueueCmd_SendMsg;
 	item.m_msg = _msg;
+  /* make sure the HomeId is Set on this message */
+	_msg->SetHomeId(m_homeId);
 	_msg->Finalize();
-
-
-	if( Node* node = GetNode(_msg->GetTargetNodeId()) )
-	{
-		// If the message is for a sleeping node, we queue it in the node itself.
-		if( !node->IsListeningDevice() )
+  {
+		LockGuard LG(m_nodeMutex);
+		if( Node* node = GetNode(_msg->GetTargetNodeId()) )
 		{
-			if( WakeUp* wakeUp = static_cast<WakeUp*>( node->GetCommandClass( WakeUp::StaticGetCommandClassId() ) ) )
+			/* if the node Supports the Security Class - check if this message is meant to be encapsulated */
+			if ( node->GetCommandClass(Security::StaticGetCommandClassId() ) )
 			{
-				if( !wakeUp->IsAwake() )
+				CommandClass *cc = node->GetCommandClass(_msg->GetSendingCommandClass());
+				if ( (cc) && (cc->IsSecured()) )
 				{
-					Log::Write( LogLevel_Detail, "" );
-					// Handle saving multi-step controller commands
-					if( m_currentControllerCommand != NULL )
-					{
-						Log::Write( LogLevel_Detail, GetNodeNumber( _msg ), "Queuing (%s) %s", c_sendQueueNames[MsgQueue_Controller], c_controllerCommandNames[m_currentControllerCommand->m_controllerCommand] );
-						delete _msg;
-						item.m_command = MsgQueueCmd_Controller;
-						item.m_cci = new ControllerCommandItem( *m_currentControllerCommand );
-						item.m_msg = NULL;
-						UpdateControllerState( ControllerState_Sleeping );
-					}
-					else
-					{
-						Log::Write( LogLevel_Detail, GetNodeNumber( _msg ), "Queuing (%s) %s", c_sendQueueNames[MsgQueue_WakeUp], _msg->GetAsString().c_str() );
-					}
-					wakeUp->QueueMsg( item );
-					ReleaseNodes();
-					return;
+					Log::Write( LogLevel_Detail, GetNodeNumber( _msg ), "Setting Encryption Flag on Message For Command Class %s", cc->GetCommandClassName().c_str());
+					item.m_msg->setEncrypted();
 				}
 			}
-		}
 
-#if 0
-		/* Security should perhaps be per command class */
-		if ((node->GetSecurityState() != Node::SecurityState_NotSupported ) && (node->GetSecurityState() != Node::SecurityState_Failed)) {
-			/* For secure nodes, messages not in Security queue are sent secure */
-			if (_queue != MsgQueue_Security) {
-				if ( Security* security = static_cast<Security*>( node->GetCommandClass( Security::StaticGetCommandClassId() ) ) ) {
-					security->SendMsg(_msg);
-					ReleaseNodes();
-					return;
-				}
-			}
-		}
-#endif		
-
-		/* if the node Supports the Security Class - check if this message is meant to be encapsulated */
-		if ( Security* security = static_cast<Security *>( node->GetCommandClass(Security::StaticGetCommandClassId() ) ) )
-		{
-			CommandClass *cc = node->GetCommandClass(_msg->GetSendingCommandClass());
-			if ( (cc) && (cc->IsSecured()) )
+			// If the message is for a sleeping node, we queue it in the node itself.
+			if( !node->IsListeningDevice() )
 			{
-				Log::Write( LogLevel_Detail, GetNodeNumber( _msg ), "Encrypting Message For Command Class %s", cc->GetCommandClassName().c_str());
-				security->SendMsg(_msg);
-				ReleaseNodes();
-				return;
+				if( WakeUp* wakeUp = static_cast<WakeUp*>( node->GetCommandClass( WakeUp::StaticGetCommandClassId() ) ) )
+				{
+					if( !wakeUp->IsAwake() )
+					{
+						Log::Write( LogLevel_Detail, "" );
+						// Handle saving multi-step controller commands
+						if( m_currentControllerCommand != NULL )
+						{
+							Log::Write( LogLevel_Detail, GetNodeNumber( _msg ), "Queuing (%s) %s", c_sendQueueNames[MsgQueue_Controller], c_controllerCommandNames[m_currentControllerCommand->m_controllerCommand] );
+							delete _msg;
+							item.m_command = MsgQueueCmd_Controller;
+							item.m_cci = new ControllerCommandItem( *m_currentControllerCommand );
+							item.m_msg = NULL;
+							UpdateControllerState( ControllerState_Sleeping );
+						}
+						else
+						{
+							Log::Write( LogLevel_Detail, GetNodeNumber( _msg ), "Queuing (%s) %s", c_sendQueueNames[MsgQueue_WakeUp], _msg->GetAsString().c_str() );
+						}
+						wakeUp->QueueMsg( item );
+						return;
+					}
+				}
 			}
 		}
-		ReleaseNodes();
 	}
+	Log::Write( LogLevel_Detail, GetNodeNumber( _msg ), "Queuing (%s) %s", c_sendQueueNames[_queue], _msg->GetAsString().c_str() );
+  m_sendMutex->Lock();
+	
+	// Look for duplicate items in the queue
+	//Log::Write(LogLevel_Info, "dup 3: %d %d", _queue, m_msgQueue[_queue].size());
+	if (_msg->GetDuplicateClassId()) {
+		for (list<MsgQueueItem>::iterator it = m_msgQueue[_queue].begin(); it != m_msgQueue[_queue].end(); it++) {
+			MsgQueueItem const& qitem = *it;
 
-	Log::Write( LogLevel_Detail, GetNodeNumber( _msg ), "Queuing command: %d %s", _queue,  _msg->GetAsString().c_str() );
-  /* Try and avoid any polling interfering with security */
-  if (_queue == Driver::MsgQueue_Security) {
-    FlushPollQueue(); 
-  }
-  
- 	Log::Write( LogLevel_Detail, GetNodeNumber( _msg ), "Queuing (%s) %s", c_sendQueueNames[_queue], _msg->GetAsString().c_str() );
-	m_sendMutex->Lock();
-  
-  
-#if 1
-  //Log::Write(LogLevel_Info, "dup 3: %d %d", _queue, m_msgQueue[_queue].size());
-  if (_msg->GetDuplicateClassId()) {
-    for (list<MsgQueueItem>::iterator it = m_msgQueue[_queue].begin(); it != m_msgQueue[_queue].end(); it++) {
-      MsgQueueItem const& qitem = *it;
-  
-      //Log::Write(LogLevel_Info, "dup 4");
-      if (qitem.m_msg && _msg->CompareCommand(qitem.m_msg)) {
-        //Log::Write(LogLevel_Info, "dup 6");
-        Log::Write (LogLevel_Detail, "Found earlier command for device: %d with ClassID: %d\n", 
-                    _msg->GetTargetNodeId(), _msg->GetDuplicateClassId());
-        // Drop the old one
-       // delete qitem.m_msg;
-        m_msgQueue[_queue].erase(it);
-        break;
-      }
-    }
-  }
-#endif
+			//Log::Write(LogLevel_Info, "dup 4");
+			if (qitem.m_msg && _msg->CompareCommand(qitem.m_msg)) {
+				//Log::Write(LogLevel_Info, "dup 6");
+				Log::Write (LogLevel_Detail, "Found earlier command for device: %d with ClassID: %d\n",
+				_msg->GetTargetNodeId(), _msg->GetDuplicateClassId());
+				// Drop the old one
+				m_msgQueue[_queue].erase(it);
+				break;
+			}
+		}
+	}
 
 	m_msgQueue[_queue].push_back( item );
   m_queueEvent[_queue]->Set();
-  
-  
 	m_sendMutex->Unlock();
 }
 
@@ -1111,13 +1079,19 @@ bool Driver::WriteNextMsg
 
 	// There are messages to send, so get the one at the front of the queue
 	m_sendMutex->Lock();
-  
-  Log::Write(LogLevel_Detail, "WriteNextMsg from queue %d with %d items", (int)_queue, m_msgQueue[_queue].size());
+
+//  if (_queue != MsgQueue_Controller) {
+    Log::Write(LogLevel_Detail, "WriteNextMsg from queue %d with %d items", (int)_queue, m_msgQueue[_queue].size());
+    //if (_queue == MsgQueue_Controller) usleep(1000 * 1000);
+//  }
+
+#if 0
   if (!m_msgQueue[_queue].size()) {
     m_queueEvent[_queue]->Reset();
     m_sendMutex->Unlock();
     return false;
-  } 
+  }
+#endif
   
 	MsgQueueItem item = m_msgQueue[_queue].front();
   
@@ -1168,6 +1142,7 @@ bool Driver::WriteNextMsg
 		// Figure out if done with command
 		if ( m_currentControllerCommand->m_controllerCommandDone )
 		{
+      Log::Write( LogLevel_Info, "WriteNextMsg Controller done" );
 			m_sendMutex->Lock();
 			m_msgQueue[_queue].pop_front();
 			if( m_msgQueue[_queue].empty() )
@@ -1186,15 +1161,19 @@ bool Driver::WriteNextMsg
 		}
 		else if( m_currentControllerCommand->m_controllerState == ControllerState_Normal )
 		{
+			Log::Write( LogLevel_Info, "WriteNextMsg Controller state normal" );
 			DoControllerCommand();
 		}
 		else if( m_currentControllerCommand->m_controllerStateChanged )
 		{
+			Log::Write( LogLevel_Info, "WriteNextMsg Controller state changed" );
 			if( m_currentControllerCommand->m_controllerCallback )
 			{
+				Log::Write( LogLevel_Info, "WriteNextMsg Controller callback" );
 				m_currentControllerCommand->m_controllerCallback( m_currentControllerCommand->m_controllerState, m_currentControllerCommand->m_controllerReturnError, m_currentControllerCommand->m_controllerCallbackContext );
-				m_currentControllerCommand->m_controllerStateChanged = false;
 			}
+				m_currentControllerCommand->m_controllerStateChanged = false;
+			//}
 		}
 		else
 		{
@@ -1210,14 +1189,20 @@ bool Driver::WriteNextMsg
 }
 
 
+//-----------------------------------------------------------------------------
+// <Driver::FlushPollQueue>
+// Remove all items from the pill queue.
+// This is done in the case of an outgoing command, since that will invalidate
+// polling of values. 
+//-----------------------------------------------------------------------------
 void Driver::FlushPollQueue()
 {
-  m_sendMutex->Lock();
-  if (!m_msgQueue[MsgQueue_Poll].empty()) {
-    m_msgQueue[MsgQueue_Poll].clear();
-    m_queueEvent[MsgQueue_Poll]->Reset();
-  }
-  m_sendMutex->Unlock();
+	m_sendMutex->Lock();
+	if (!m_msgQueue[MsgQueue_Poll].empty()) {
+		m_msgQueue[MsgQueue_Poll].clear();
+		m_queueEvent[MsgQueue_Poll]->Reset();
+	}
+	m_sendMutex->Unlock();
 }
 
 
@@ -1241,11 +1226,23 @@ bool Driver::WriteMsg
 		m_waitingForAck = false;
 		return false;
 	}
-	
-	uint8 attempts = m_currentMsg->GetSendAttempts();
-	uint8 nodeId = m_currentMsg->GetTargetNodeId();
+	/* if this is called with m_nonceReportSent > 0 it means that we have
+	 * tried to send a NONCE report and it timed out or was NAK'd
+	 *
+	 */
+	uint8 attempts;
+	uint8 nodeId;
+	if (m_nonceReportSent > 0) {
+		attempts = m_nonceReportSentAttempt++;
+		nodeId = m_nonceReportSent;
+	} else {
+		attempts = m_currentMsg->GetSendAttempts();
+		nodeId = m_currentMsg->GetTargetNodeId();
+	}
+	LockGuard LG(m_nodeMutex);
 	Node* node = GetNode( nodeId );
-	if( attempts >= m_currentMsg->GetMaxSendAttempts() || (node != NULL && !node->IsNodeAlive() && !m_currentMsg->IsNoOperation() ) )
+	if( attempts >= m_currentMsg->GetMaxSendAttempts() ||
+			(node != NULL && !node->IsNodeAlive() && !m_currentMsg->IsNoOperation() ) )
 	{
 		if( node != NULL && !node->IsNodeAlive() )
 		{
@@ -1256,38 +1253,41 @@ bool Driver::WriteMsg
 			// That's it - already tried to send GetMaxSendAttempt() times.
 			Log::Write( LogLevel_Error, nodeId, "ERROR: Dropping command, expected response not received after %d attempt(s)", m_currentMsg->GetMaxSendAttempts() );
 		}
+		if( m_currentControllerCommand != NULL )
+		{
+			/* it's a ControllerCommand that has failed */
+			UpdateControllerState( ControllerState_Error, ControllerError_Failed);
+
+		}
+
 		RemoveCurrentMsg();
 		m_dropped++;
-		if( node != NULL )
-		{
-      // Advance if stuck in security
-      if (node->GetCurrentQueryStage() == Node::QueryStage_SecurityReport) {
-        Log::Write( LogLevel_Info, nodeId, " **** Security stage stalled *****");
-        //exit(0);
-        if( Security* security = static_cast<Security*>( node->GetCommandClass( Security::StaticGetCommandClassId() ) ) ) {
-            security->AdvanceSecurity();
-        //exit(0);
-        //node->QueryStageComplete(Node::QueryStage_SecurityReport);
-        //node->AdvanceQueries();
-        }        
-      }
-			ReleaseNodes();
-		}
 		return false;
 	}
 
-	if( attempts != 0)
+	if (( attempts != 0) && (m_nonceReportSent == 0))
 	{
 		// this is not the first attempt, so increment the callback id before sending
 		m_currentMsg->UpdateCallbackId();
 	}
+	
+	/* XXX TODO: Minor Bug - Due to the post increament of the SendAttempts, it means our final NONCE_GET will go though
+	 * but the subsequent MSG send will fail (as the counter is incremented only upon a successful NONCE_GET, and Not a Send
+	 *
+	 */
 
-	m_currentMsg->SetSendAttempts( ++attempts );
-	m_expectedCallbackId = m_currentMsg->GetCallbackId();
-	m_expectedCommandClassId = m_currentMsg->GetExpectedCommandClassId();
-	m_expectedNodeId = m_currentMsg->GetTargetNodeId();
-	m_expectedReply = m_currentMsg->GetExpectedReply();
-	m_waitingForAck = true;
+	if (m_nonceReportSent == 0) {
+		if (m_currentMsg->isEncrypted() && !m_currentMsg->isNonceRecieved()) {
+			m_currentMsg->SetSendAttempts( ++attempts );
+		} else if (!m_currentMsg->isEncrypted() ) {
+			m_currentMsg->SetSendAttempts( ++attempts );
+		}
+		m_expectedCallbackId = m_currentMsg->GetCallbackId();
+		m_expectedCommandClassId = m_currentMsg->GetExpectedCommandClassId();
+		m_expectedNodeId = m_currentMsg->GetTargetNodeId();
+		m_expectedReply = m_currentMsg->GetExpectedReply();
+		m_waitingForAck = true;
+	}
 	string attemptsstr = "";
 	if( attempts > 1 )
 	{
@@ -1302,11 +1302,37 @@ bool Driver::WriteMsg
 	}
 
 	Log::Write( LogLevel_Detail, "" );
-	Log::Write( LogLevel_Info, nodeId, "Sending (%s) message (%sCallback ID=0x%.2x, Expected Reply=0x%.2x) - %s", c_sendQueueNames[m_currentMsgQueueSource], attemptsstr.c_str(), m_expectedCallbackId, m_expectedReply, m_currentMsg->GetAsString().c_str() );
 
-	m_controller->Write( m_currentMsg->GetBuffer(), m_currentMsg->GetLength() );
+	if (m_nonceReportSent > 0) {
+		/* send a new NONCE report */
+		SendNonceKey(m_nonceReportSent, node->GenerateNonceKey());
+	} else if (m_currentMsg->isEncrypted()) {
+		if (m_currentMsg->isNonceRecieved()) {
+			Log::Write( LogLevel_Info, nodeId, "Processing (%s) Encrypted message (%sCallback ID=0x%.2x, Expected Reply=0x%.2x) - %s", c_sendQueueNames[m_currentMsgQueueSource], attemptsstr.c_str(), m_expectedCallbackId, m_expectedReply, m_currentMsg->GetAsString().c_str() );
+			SendEncryptedMessage();
+		} else {
+			Log::Write( LogLevel_Info, nodeId, "Processing (%s) Nonce Request message (%sCallback ID=0x%.2x, Expected Reply=0x%.2x)", c_sendQueueNames[m_currentMsgQueueSource], attemptsstr.c_str(), m_expectedCallbackId, m_expectedReply);
+			SendNonceRequest(m_currentMsg->GetLogText());
+		}
+	} else {
+		Log::Write( LogLevel_Info, nodeId, "Sending (%s) message (%sCallback ID=0x%.2x, Expected Reply=0x%.2x) - %s", c_sendQueueNames[m_currentMsgQueueSource], attemptsstr.c_str(), m_expectedCallbackId, m_expectedReply, m_currentMsg->GetAsString().c_str() );
+		uint32 bytesWritten = m_controller->Write(m_currentMsg->GetBuffer(), m_currentMsg->GetLength());
+
+		if (bytesWritten == 0)
+		{
+			//0 will be returned when the port is closed or something bad happened
+			//so send notification
+			Notification* notification = new Notification(Notification::Type_DriverFailed);
+			notification->SetHomeAndNodeIds(m_homeId, m_currentMsg->GetTargetNodeId());
+			QueueNotification(notification);
+			NotifyWatchers();
+
+			m_driverThread->Stop();
+			return false;
+		}
+	}
 	m_writeCnt++;
-	
+
 	if( nodeId == 0xff )
 	{
 		m_broadcastWriteCnt++; // not accurate since library uses 0xff for the controller too
@@ -1319,7 +1345,7 @@ bool Driver::WriteMsg
 			node->m_sentTS.SetTime();
 			if( m_expectedReply == FUNC_ID_APPLICATION_COMMAND_HANDLER )
 			{
-				CommandClass* cc = node->GetCommandClass( m_expectedCommandClassId );
+				CommandClass *cc = node->GetCommandClass(m_expectedCommandClassId);
 				if( cc != NULL )
 				{
 					cc->SentCntIncr();
@@ -1327,11 +1353,6 @@ bool Driver::WriteMsg
 			}
 		}
 	}
-	if( node != NULL )
-	{
-		ReleaseNodes();
-	}
-
 	return true;
 }
 
@@ -1355,6 +1376,8 @@ void Driver::RemoveCurrentMsg
 	m_expectedNodeId = 0;
 	m_expectedReply = 0;
 	m_waitingForAck = false;
+	m_nonceReportSent = 0;
+	m_nonceReportSentAttempt = 0;
 }
 
 //-----------------------------------------------------------------------------
@@ -1367,11 +1390,14 @@ bool Driver::MoveMessagesToWakeUpQueue
 		bool const _move
 )
 {
+   Log::Write( LogLevel_Info, "MoveMessagesToWakeUpQueue: Now has %d items\n", m_msgQueue[MsgQueue_WakeUp].size());
+
+  
 	// If the target node is one that goes to sleep, transfer
 	// all messages for it to its Wake-Up queue.
 	if( Node* node = GetNodeUnsafe(_targetNodeId) )
 	{
-		if( !node->IsListeningDevice() && !node->IsFrequentListeningDevice() && _targetNodeId != m_nodeId )
+		if( !node->IsListeningDevice() && !node->IsFrequentListeningDevice() && _targetNodeId != m_Controller_nodeId )
 		{
 			if( WakeUp* wakeUp = static_cast<WakeUp*>( node->GetCommandClass( WakeUp::StaticGetCommandClassId() ) ) )
 			{
@@ -1401,7 +1427,12 @@ bool Driver::MoveMessagesToWakeUpQueue
 							// commands or NoOperations to the pending queue.
 							if( !m_currentMsg->IsWakeUpNoMoreInformationCommand() && !m_currentMsg->IsNoOperation() )
 							{
-								Log::Write( LogLevel_Info, _targetNodeId, "Node not responding - moving message to Wake-Up queue: %s", m_currentMsg->GetAsString().c_str() );
+								Log::Write( LogLevel_Info, _targetNodeId, "Node not responding - moving message (1) to Wake-Up queue: %s (%d items)", m_currentMsg->GetAsString().c_str(),
+                  m_msgQueue[MsgQueue_WakeUp].size()
+               );
+								/* reset the sendAttempts */
+								m_currentMsg->SetSendAttempts(0);
+
 								MsgQueueItem item;
 								item.m_command = MsgQueueCmd_SendMsg;
 								item.m_msg = m_currentMsg;
@@ -1438,7 +1469,9 @@ bool Driver::MoveMessagesToWakeUpQueue
 									// commands or NoOperations to the pending queue.
 									if( !item.m_msg->IsWakeUpNoMoreInformationCommand() && !item.m_msg->IsNoOperation() )
 									{
-										Log::Write( LogLevel_Info, item.m_msg->GetTargetNodeId(), "Node not responding - moving message to Wake-Up queue: %s", item.m_msg->GetAsString().c_str() );
+										Log::Write( LogLevel_Info, item.m_msg->GetTargetNodeId(), "Node not responding (2) - moving message to Wake-Up queue: %s (%d items)", item.m_msg->GetAsString().c_str(), m_msgQueue[MsgQueue_WakeUp].size() );
+										 /* reset any SendAttempts */
+										item.m_msg->SetSendAttempts(0);
 										wakeUp->QueueMsg( item );
 									}
 									else
@@ -1453,6 +1486,7 @@ bool Driver::MoveMessagesToWakeUpQueue
 								if( _targetNodeId == item.m_nodeId )
 								{
 									Log::Write( LogLevel_Info, _targetNodeId, "Node not responding - moving QueryStageComplete command to Wake-Up queue" );
+									
 									wakeUp->QueueMsg( item );
 									remove = true;
 								}
@@ -1462,6 +1496,7 @@ bool Driver::MoveMessagesToWakeUpQueue
 								if( _targetNodeId == item.m_cci->m_controllerCommandNode )
 								{
 									Log::Write( LogLevel_Info, _targetNodeId, "Node not responding - moving controller command to Wake-Up queue: %s", c_controllerCommandNames[item.m_cci->m_controllerCommand] );
+									
 									wakeUp->QueueMsg( item );
 									remove = true;
 								}
@@ -1578,7 +1613,7 @@ void Driver::CheckCompletedNodeQueries
 		bool sleepingOnly = true;
 		bool deadFound = false;
 
-		LockNodes();
+		LockGuard LG(m_nodeMutex);
 		for( int i=0; i<256; ++i )
 		{
 			if( m_nodes[i] )
@@ -1598,7 +1633,7 @@ void Driver::CheckCompletedNodeQueries
 				}
 			}
 		}
-		ReleaseNodes();
+		LG.Unlock();
 
 		Log::Write( LogLevel_Warning, "CheckCompletedNodeQueries all=%d, deadFound=%d sleepingOnly=%d", all, deadFound, sleepingOnly );
 		if( all )
@@ -1856,8 +1891,108 @@ void Driver::ProcessMsg
 )
 {
 	bool handleCallback = true;
+	bool wasencrypted = false;
 	uint8 nodeId = GetNodeNumber( m_currentMsg );
 
+	if ((REQUEST == _data[0]) &&
+			(Security::StaticGetCommandClassId() == _data[5])) {
+		/* if this message is a NONCE Report - Then just Trigger the Encrypted Send */
+		if (SecurityCmd_NonceReport == _data[6]) {
+			Log::Write(LogLevel_Info,  _data[3], "Received SecurityCmd_NonceReport from node %d", _data[3] );
+
+			/* handle possible resends of NONCE_REPORT messages.... See Issue #931 */
+			if (!m_currentMsg) {
+				Log::Write(LogLevel_Warning, _data[3], "Received a NonceReport from node, but no pending messages. Dropping..");
+				return;
+			}
+
+			// No Need to triger a WriteMsg here - It should be handled automatically
+			m_currentMsg->setNonce(&_data[7]);
+			this->SendEncryptedMessage();
+			return;
+
+			/* if this is a NONCE Get - Then call to the CC directly, process it, and then bail out. */
+		} else if (SecurityCmd_NonceGet == _data[6]) {
+			Log::Write(LogLevel_Info,  _data[3], "Received SecurityCmd_NonceGet from node %d", _data[3] );
+			{
+				uint8 *nonce = NULL;
+				LockGuard LG(m_nodeMutex);
+				Node* node = GetNode( _data[3] );
+				if( node ) {
+					nonce = node->GenerateNonceKey();
+				} else {
+					Log::Write(LogLevel_Warning, _data[3], "Couldn't Generate Nonce Key for Node %d", _data[3]);
+					return;
+				}
+
+				SendNonceKey(_data[3], nonce);
+
+			}
+			/* don't continue processing */
+			return;
+
+			/* if this message is encrypted, decrypt it first */
+		} else if ((SecurityCmd_MessageEncap == _data[6]) || (SecurityCmd_MessageEncapNonceGet == _data[6])) {
+			uint8 _newdata[256];
+			uint8 *_nonce;
+
+			/* clear out NONCE Report tracking */
+			m_nonceReportSent = 0;
+			m_nonceReportSentAttempt = 0;
+
+
+			/* make sure the Node Exists, and it has the Security CC */
+			{
+				LockGuard LG(m_nodeMutex);
+				Node* node = GetNode( _data[3] );
+				if( node ) {
+					_nonce = node->GetNonceKey(_data[_data[4]-4]);
+					if (!_nonce) {
+						Log::Write(LogLevel_Warning, _data[3], "Could Not Retrieve Nonce for Node %d", _data[3]);
+						return;
+					}
+				} else {
+					Log::Write(LogLevel_Warning, _data[3], "Can't Find Node %d for Encrypted Message", _data[3]);
+					return;
+				}
+			}
+			if (DecryptBuffer(&_data[5], _data[4]+1, this, _data[3], this->GetControllerNodeId(), _nonce, &_newdata[0])) {
+				/* Ok - _newdata now contains the decrypted packet */
+				/* copy it back to the _data packet for processing */
+				/* New Length - See Decrypt Packet for why these numbers*/
+				_data[4] = _data[4] - 8 - 8 - 2 - 2;
+
+				/* now copy the decrypted packet */
+				memcpy_s(&_data[5], _data[4], &_newdata[1], _data[4]);
+				//PrintHex("Decrypted Packet", _data, _data[4]+5);
+
+				/* if the Node has something else to send, it will encrypt a message and send it as a MessageEncapNonceGet */
+				if (SecurityCmd_MessageEncapNonceGet == _data[6])
+				{
+					Log::Write(LogLevel_Info,  _data[3], "Received SecurityCmd_MessageEncapNonceGet from node %d - Sending New Nonce", _data[3] );
+					LockGuard LG(m_nodeMutex);
+					Node* node = GetNode( _data[3] );
+					if( node ) {
+						_nonce = node->GenerateNonceKey();
+					} else {
+						Log::Write(LogLevel_Warning, _data[3], "Couldn't Generate Nonce Key for Node %d", _data[3]);
+						return;
+					}
+					SendNonceKey(_data[3], _nonce);
+				}
+				wasencrypted = true;
+
+			} else {
+				/* it failed for some reason, lets just move on */
+				m_expectedReply = 0;
+				m_expectedNodeId = 0;
+				RemoveCurrentMsg();
+				return;
+			}
+		}
+	}
+
+	
 	if( RESPONSE == _data[0] )
 	{
 		switch( _data[1] )
@@ -2118,7 +2253,7 @@ void Driver::ProcessMsg
 			case FUNC_ID_APPLICATION_COMMAND_HANDLER:
 			{
 				Log::Write( LogLevel_Detail, "" );
-				HandleApplicationCommandHandlerRequest( _data );
+				HandleApplicationCommandHandlerRequest( _data, wasencrypted );
 				break;
 			}
 			case FUNC_ID_ZW_SEND_DATA:
@@ -2269,6 +2404,9 @@ void Driver::ProcessMsg
 				{
 					Log::Write( LogLevel_Detail, nodeId, "  Expected callbackId was received" );
 					m_expectedCallbackId = 0;
+				} else if (_data[2] == 0x02 || _data[2] == 0x01) {
+					/* it was a NONCE request/reply. Drop it */
+					return;
 				}
 			}
 			if( m_expectedReply )
@@ -2528,26 +2666,29 @@ void Driver::HandleGetSUCNodeIdResponse
 {
 	Log::Write( LogLevel_Info, GetNodeNumber( m_currentMsg ), "Received reply to GET_SUC_NODE_ID.  Node ID = %d", _data[2] );
 	m_SUCNodeId = _data[2];
-
 	if( _data[2] == 0)
 	{
 		bool enableSIS = true;
 		Options::Get()->GetOptionAsBool("EnableSIS", &enableSIS);
 		if (enableSIS) {
-			Log::Write( LogLevel_Info, "  No SUC, so we become SIS" );
+			if (IsAPICallSupported(FUNC_ID_ZW_ENABLE_SUC) && IsAPICallSupported(FUNC_ID_ZW_SET_SUC_NODE_ID)) {
+				Log::Write( LogLevel_Info, "  No SUC, so we become SIS" );
 		
-			Msg* msg;
-			msg = new Msg( "Enable SUC", m_nodeId, REQUEST, FUNC_ID_ZW_ENABLE_SUC, false );
-			msg->Append( 1 );
-			msg->Append( SUC_FUNC_NODEID_SERVER );		// SIS; SUC would be ZW_SUC_FUNC_BASIC_SUC
-			SendMsg( msg, MsgQueue_Send );
+				Msg* msg;
+				msg = new Msg( "Enable SUC", m_Controller_nodeId, REQUEST, FUNC_ID_ZW_ENABLE_SUC, false );
+				msg->Append( 1 );
+				msg->Append( SUC_FUNC_NODEID_SERVER );		// SIS; SUC would be ZW_SUC_FUNC_BASIC_SUC
+				SendMsg( msg, MsgQueue_Send );
 
-			msg = new Msg( "Set SUC node ID", m_nodeId, REQUEST, FUNC_ID_ZW_SET_SUC_NODE_ID, false );
-			msg->Append( m_nodeId );
-			msg->Append( 1 );								// TRUE, we want to be SUC/SIS
-			msg->Append( 0 );								// no low power
-			msg->Append( SUC_FUNC_NODEID_SERVER );
-			SendMsg( msg, MsgQueue_Send );
+				msg = new Msg( "Set SUC node ID", m_Controller_nodeId, REQUEST, FUNC_ID_ZW_SET_SUC_NODE_ID, false );
+				msg->Append( m_Controller_nodeId );
+				msg->Append( 1 );								// TRUE, we want to be SUC/SIS
+				msg->Append( 0 );								// no low power
+				msg->Append( SUC_FUNC_NODEID_SERVER );
+				SendMsg( msg, MsgQueue_Send );
+			} else {
+				Log::Write (LogLevel_Info, "Controller Does not Support SUC - Cannot Setup Controller as SUC Node");
+			}
 		} else {
 			Log::Write( LogLevel_Info, "  No SUC, not becoming SUC as option is disabled" );
 		}
@@ -2565,8 +2706,8 @@ void Driver::HandleMemoryGetIdResponse
 {
 	Log::Write( LogLevel_Info, GetNodeNumber( m_currentMsg ), "Received reply to FUNC_ID_ZW_MEMORY_GET_ID. Home ID = 0x%02x%02x%02x%02x.  Our node ID = %d", _data[2], _data[3], _data[4], _data[5], _data[6] );
 	m_homeId = (((uint32)_data[2])<<24) | (((uint32)_data[3])<<16) | (((uint32)_data[4])<<8) | ((uint32)_data[5]);
-	m_nodeId = _data[6];
-	m_controllerReplication = static_cast<ControllerReplication*>(ControllerReplication::Create( m_homeId, m_nodeId ));
+	m_Controller_nodeId = _data[6];
+	m_controllerReplication = static_cast<ControllerReplication*>(ControllerReplication::Create( m_homeId, m_Controller_nodeId ));
 }
 
 //-----------------------------------------------------------------------------
@@ -2617,6 +2758,7 @@ void Driver::HandleSerialAPIGetInitDataResponse
 					}
 					else
 					{
+						LockGuard LG(m_nodeMutex);
 						Node* node = GetNode( nodeId );
 						if( node )
 						{
@@ -2628,11 +2770,10 @@ void Driver::HandleSerialAPIGetInitDataResponse
 								if (Manager::Get()->m_batteryMode) {
 									node->SetQueryStage( Node::QueryStage_Complete );
 								} else {
-									node->SetQueryStage( Node::QueryStage_Probe1 );
+									node->SetQueryStage( Node::QueryStage_CacheLoad );
 								}
 							}
 
-							ReleaseNodes();
 						}
 						else
 						{
@@ -2649,6 +2790,7 @@ void Driver::HandleSerialAPIGetInitDataResponse
 				}
 				else
 				{
+					LockGuard LG(m_nodeMutex);
 					if( GetNode(nodeId) )
 					{
 						// This node no longer exists in the Z-Wave network
@@ -2659,7 +2801,6 @@ void Driver::HandleSerialAPIGetInitDataResponse
 						notification->SetHomeAndNodeIds( m_homeId, nodeId );
 						QueueNotification( notification ); 
 
-						ReleaseNodes();
 					}
 				}
 			}
@@ -2826,6 +2967,22 @@ void Driver::HandleIsFailedNodeResponse
 	{
 		Log::Write( LogLevel_Warning, nodeId, "WARNING: Received reply to FUNC_ID_ZW_IS_FAILED_NODE_ID - node %d failed", nodeId );
 		state = ControllerState_NodeFailed;
+		if( Node* node = GetNodeUnsafe( nodeId ) )
+			{
+				if (node->IsNodeReset()) {
+					/* a DeviceReset has Occured. Remove the Node */
+				  if (!BeginControllerCommand(Driver::ControllerCommand_RemoveFailedNode, NULL, NULL, true, nodeId, 0)) {
+						Log::Write(LogLevel_Warning, nodeId, "RemoveFailedNode for DeviceResetLocally Command Failed");
+
+						Notification* notification = new Notification( Notification::Type_NodeReset );
+						notification->SetHomeAndNodeIds( m_homeId, nodeId );
+						QueueNotification( notification );
+				               }
+						state = ControllerState_Completed;
+					} else {
+						node->SetNodeAlive( false );
+					}
+		}
 	}
 	else
 	{
@@ -2876,19 +3033,7 @@ void Driver::HandleSendDataResponse
 		bool _replication
 )
 {
-	if( _data[2] )
-	{
-		Log::Write( LogLevel_Detail, GetNodeNumber( m_currentMsg ), "  %s delivered to Z-Wave stack", _replication ? "ZW_REPLICATION_SEND_DATA" : "ZW_SEND_DATA" );
-	}
-	else
-	{
-		Log::Write( LogLevel_Error, GetNodeNumber( m_currentMsg ), "ERROR: %s could not be delivered to Z-Wave stack", _replication ? "ZW_REPLICATION_SEND_DATA" : "ZW_SEND_DATA" );
-		m_nondelivery++;
-		if( Node* node = GetNodeUnsafe( GetNodeNumber( m_currentMsg ) ) )
-		{
-			node->m_sentFailed++;
-		}
-	}
+
 }
 
 //-----------------------------------------------------------------------------
@@ -2902,11 +3047,11 @@ void Driver::HandleGetRoutingInfoResponse
 {
 	Log::Write( LogLevel_Info, GetNodeNumber( m_currentMsg ), "Received reply to FUNC_ID_ZW_GET_ROUTING_INFO" );
 
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( GetNodeNumber( m_currentMsg ) ) )
 	{
 		// copy the 29-byte bitmap received (29*8=232 possible nodes) into this node's neighbors member variable
 		memcpy_s( node->m_neighbors, sizeof(node->m_neighbors), &_data[2], 29 );
-		ReleaseNodes();
 		Log::Write( LogLevel_Info, GetNodeNumber( m_currentMsg ), "    Neighbors of this node are:" );
 		bool bNeighbors = false;
 		for( int by=0; by<29; by++ )
@@ -2940,15 +3085,13 @@ void Driver::HandleSendDataRequest
 {
 	uint8 nodeId = GetNodeNumber( m_currentMsg );
 	Log::Write( LogLevel_Detail, nodeId, "  %s Request with callback ID 0x%.2x received (expected 0x%.2x)",  _replication ? "ZW_REPLICATION_SEND_DATA" : "ZW_SEND_DATA", _data[2], m_expectedCallbackId );
-
-	if( _data[2] != m_expectedCallbackId )
+	/* Callback IDs below 10 are reserved for NONCE messages */
+	if ((_data[2] > 10 ) && ( _data[2] != m_expectedCallbackId ))
 	{
 		// Wrong callback ID
 		m_callbacks++;
 		Log::Write( LogLevel_Warning, nodeId, "WARNING: Unexpected Callback ID received" );
-	}
-	else
-	{
+	} else {
 		Node* node = GetNodeUnsafe( nodeId );
 		if( node != NULL )
 		{
@@ -2975,7 +3118,7 @@ void Driver::HandleSendDataRequest
 		}
 
 		// We do this here since HandleErrorResponse/MoveMessagesToWakeUpQueue can delete m_currentMsg
-		if( m_currentMsg->IsNoOperation() )
+		if( m_currentMsg && m_currentMsg->IsNoOperation() )
 		{
 			Notification* notification = new Notification( Notification::Type_Notification );
 			notification->SetHomeAndNodeIds( m_homeId, GetNodeNumber( m_currentMsg) );
@@ -2988,9 +3131,9 @@ void Driver::HandleSendDataRequest
 		{
 			if( !HandleErrorResponse( _data[3], nodeId, _replication ? "ZW_REPLICATION_END_DATA" : "ZW_SEND_DATA", !_replication ) )
 			{
-				if( m_currentMsg->IsNoOperation() && node != NULL &&
+				if( m_currentMsg && m_currentMsg->IsNoOperation() && node != NULL &&
 						( node->GetCurrentQueryStage() == Node::QueryStage_Probe  ||
-								node->GetCurrentQueryStage() == Node::QueryStage_Probe1 ) )
+								node->GetCurrentQueryStage() == Node::QueryStage_CacheLoad ) )
 				{
 					node->QueryStageRetry( node->GetCurrentQueryStage(), 3 );
 				}
@@ -2999,7 +3142,7 @@ void Driver::HandleSendDataRequest
 		else if( node != NULL )
 		{
 			// If WakeUpNoMoreInformation request succeeds, update our status
-			if( m_currentMsg->IsWakeUpNoMoreInformationCommand() )
+			if( m_currentMsg && m_currentMsg->IsWakeUpNoMoreInformationCommand() )
 			{
 				if( WakeUp* wakeUp = static_cast<WakeUp*>( node->GetCommandClass( WakeUp::StaticGetCommandClassId() ) ) )
 				{
@@ -3013,8 +3156,9 @@ void Driver::HandleSendDataRequest
 				node->SetNodeAlive( true );
 			}
 		}
-		// Command reception acknowledged by node, error or not
-		m_expectedCallbackId = 0;
+		// Command reception acknowledged by node, error or not, but ignore any NONCE messages
+		//
+		//	m_expectedCallbackId = 0;
 	}
 }
 
@@ -3141,7 +3285,7 @@ void Driver::HandleRemoveNodeFromNetworkRequest
 			{
 				if( _data[5] >= 3 )
 				{
-					LockNodes();
+					LockGuard LG(m_nodeMutex);
 					for( int i=0; i<256; i++ )
 					{
 						if( m_nodes[i] == NULL )
@@ -3149,7 +3293,7 @@ void Driver::HandleRemoveNodeFromNetworkRequest
 							continue;
 						}
 						// Ignore primary controller
-						if( m_nodes[i]->m_nodeId == m_nodeId )
+						if( m_nodes[i]->m_nodeId == m_Controller_nodeId )
 						{
 							continue;
 						}
@@ -3168,7 +3312,7 @@ void Driver::HandleRemoveNodeFromNetworkRequest
 							}
 						}
 					}
-					ReleaseNodes();
+					LG.Unlock();
 				}
 				else
 				{
@@ -3191,7 +3335,7 @@ void Driver::HandleRemoveNodeFromNetworkRequest
 				// Remove Node Stop calls back through here so make sure
 				// we do't do it again.
 				UpdateControllerState( ControllerState_Completed );
-				AddNodeStop( FUNC_ID_ZW_REMOVE_NODE_FROM_NETWORK );
+				//AddNodeStop( FUNC_ID_ZW_REMOVE_NODE_FROM_NETWORK );
 				if ( m_currentControllerCommand->m_controllerCommandNode == 0 ) // never received "removing" update
 				{
 					if ( _data[4] != 0 ) // but message has the clue
@@ -3202,10 +3346,10 @@ void Driver::HandleRemoveNodeFromNetworkRequest
 
 				if ( m_currentControllerCommand->m_controllerCommandNode != 0 && m_currentControllerCommand->m_controllerCommandNode != 0xff )
 				{
-					LockNodes();
+					LockGuard LG(m_nodeMutex);
 					delete m_nodes[m_currentControllerCommand->m_controllerCommandNode];
 					m_nodes[m_currentControllerCommand->m_controllerCommandNode] = NULL;
-					ReleaseNodes();
+					LG.Unlock();
 
 					Notification* notification = new Notification( Notification::Type_NodeRemoved );
 					notification->SetHomeAndNodeIds( m_homeId, m_currentControllerCommand->m_controllerCommandNode );
@@ -3216,7 +3360,7 @@ void Driver::HandleRemoveNodeFromNetworkRequest
 		}
 		case REMOVE_NODE_STATUS_FAILED:
 		{
-			AddNodeStop( FUNC_ID_ZW_REMOVE_NODE_FROM_NETWORK );
+			//AddNodeStop( FUNC_ID_ZW_REMOVE_NODE_FROM_NETWORK );
 			Log::Write( LogLevel_Warning,  "WARNING: REMOVE_NODE_STATUS_FAILED" );
 			state = ControllerState_Failed;
 			break;
@@ -3351,10 +3495,10 @@ void Driver::HandleRemoveFailedNodeRequest
 			Log::Write( LogLevel_Info, nodeId, "Received reply to FUNC_ID_ZW_REMOVE_FAILED_NODE_ID - node %d successfully moved to failed nodes list", m_currentControllerCommand->m_controllerCommandNode );
 			state = ControllerState_Completed;
 
-			LockNodes();
+			LockGuard LG(m_nodeMutex);
 			delete m_nodes[m_currentControllerCommand->m_controllerCommandNode];
 			m_nodes[m_currentControllerCommand->m_controllerCommandNode] = NULL;
-			ReleaseNodes();
+			LG.Unlock();
 			
 			Notification* notification = new Notification( Notification::Type_NodeRemoved );
 			notification->SetHomeAndNodeIds( m_homeId, m_currentControllerCommand->m_controllerCommandNode );
@@ -3427,9 +3571,11 @@ void Driver::HandleReplaceFailedNodeRequest
 //-----------------------------------------------------------------------------
 void Driver::HandleApplicationCommandHandlerRequest
 (
-		uint8* _data
+		uint8* _data,
+		bool encrypted
 )
 {
+
 	uint8 status = _data[2];
 	uint8 nodeId = _data[3];
 	uint8 classId = _data[5];
@@ -3503,7 +3649,7 @@ void Driver::HandleApplicationCommandHandlerRequest
 		// Allow the node to handle the message itself
 		if( node != NULL )
 		{
-			node->ApplicationCommandHandler( _data );
+			node->ApplicationCommandHandler( _data, encrypted );
 		}
 	}
 }
@@ -3626,6 +3772,9 @@ void Driver::HandleNodeNeighborUpdateRequest
 )
 {
 	uint8 nodeId = GetNodeNumber( m_currentMsg );
+
+  if (!nodeId && m_currentControllerCommand) nodeId = m_currentControllerCommand->m_controllerCommandNode;
+  
 	ControllerState state = ControllerState_Normal;
 	switch( _data[3] )
 	{
@@ -3633,25 +3782,37 @@ void Driver::HandleNodeNeighborUpdateRequest
 		{
 			Log::Write( LogLevel_Info, nodeId, "REQUEST_NEIGHBOR_UPDATE_STARTED" );
 			state = ControllerState_InProgress;
+			m_waitingForNetworkUpdate = true;
+		  //state = ControllerState_Waiting;
 			break;
 		}
 		case REQUEST_NEIGHBOR_UPDATE_DONE:
 		{
 			Log::Write( LogLevel_Info, nodeId, "REQUEST_NEIGHBOR_UPDATE_DONE" );
 			state = ControllerState_Completed;
-
+			m_waitingForNetworkUpdate = false;
+      
+      Notification* notification = new Notification( Notification::Type_NeighborUpdateDone );
+      notification->SetHomeAndNodeIds( m_homeId, nodeId );
+      QueueNotification( notification );
+      
 			// We now request the neighbour information from the
 			// controller and store it in our node object.
 			if( m_currentControllerCommand != NULL )
 			{
 				RequestNodeNeighbors( m_currentControllerCommand->m_controllerCommandNode, 0 );
 			}
+
 			break;
 		}
 		case REQUEST_NEIGHBOR_UPDATE_FAILED:
 		{
 			Log::Write( LogLevel_Warning, nodeId, "WARNING: REQUEST_NEIGHBOR_UPDATE_FAILED" );
 			state = ControllerState_Failed;
+			m_waitingForNetworkUpdate = false;
+			Notification* notification = new Notification( Notification::Type_NeighborUpdateFailed );
+			notification->SetHomeAndNodeIds( m_homeId, nodeId );
+			QueueNotification( notification );
 			break;
 		}
 		default:
@@ -3694,10 +3855,10 @@ bool Driver::HandleApplicationUpdateRequest
 		{
 			Log::Write( LogLevel_Info, nodeId, "** Network change **: Z-Wave node %d was removed", nodeId );
 
-			LockNodes();
+			LockGuard LG(m_nodeMutex);
 			delete m_nodes[nodeId];
 			m_nodes[nodeId] = NULL;
-			ReleaseNodes();
+			LG.Unlock();
 
 			Notification* notification = new Notification( Notification::Type_NodeRemoved );
 			notification->SetHomeAndNodeIds( m_homeId, nodeId );
@@ -3707,10 +3868,16 @@ bool Driver::HandleApplicationUpdateRequest
 		case UPDATE_STATE_NEW_ID_ASSIGNED:
 		{
 			Log::Write( LogLevel_Info, nodeId, "** Network change **: ID %d was assigned to a new Z-Wave node", nodeId );
-			
-			// Request the node protocol info (also removes any existing node and creates a new one)
-			InitNode( nodeId );		
-			break;
+                        // Check if the new node id is equal to the current one.... if so no operation is needed, thus no remove and add is necessary
+                        if ( _data[3] != _data[6] )
+                        {
+                        	// Request the node protocol info (also removes any existing node and creates a new one)
+			        InitNode( nodeId );
+                        }
+                        else
+                        {
+                        	Log::Write(LogLevel_Info, nodeId, "Not Re-assigning NodeID as old and new NodeID match");
+                        }
 		}
 		case UPDATE_STATE_ROUTING_PENDING:
 		{
@@ -3752,7 +3919,7 @@ bool Driver::HandleApplicationUpdateRequest
 			Log::Write( LogLevel_Info, nodeId, "UPDATE_STATE_NODE_INFO_RECEIVED from node %d", nodeId );
 			if( node )
 			{
-				node->UpdateNodeInfo( &_data[8], _data[4] - 3, false );
+				node->UpdateNodeInfo( &_data[8], _data[4] - 3 );
 			}
 			break;
 		}
@@ -3804,8 +3971,8 @@ void Driver::CommonAddNodeStatusRequestHandler
 		case ADD_NODE_STATUS_ADDING_SLAVE:
 		{
 			Log::Write( LogLevel_Info, nodeId, "ADD_NODE_STATUS_ADDING_SLAVE" );			
-			Log::Write( LogLevel_Info, nodeId, "Adding node ID %d", _data[4] );
-			/* Discovered all the CC's are sent in this packet as well:
+			Log::Write( LogLevel_Info, nodeId, "Adding node ID %d - %s", _data[4], m_currentControllerCommand->m_controllerCommandArg ? "Secure" : "Non-Secure");
+			/* Discovered all the CCs are sent in this packet as well:
 			 * position description
 			 * 4 - Node ID
 			 * 5 - Length
@@ -3819,9 +3986,14 @@ void Driver::CommonAddNodeStatusRequestHandler
 			{
 				m_currentControllerCommand->m_controllerAdded = false;
 				m_currentControllerCommand->m_controllerCommandNode = _data[4];
+				/* make sure we dont overrun our buffer. It's ok to truncate */
+				uint8 length = _data[5];
+				if (length > 254) length = 254;
+				memcpy_s(&m_currentControllerCommand->m_controllerDeviceProtocolInfo, length, &_data[6], length);
+				m_currentControllerCommand->m_controllerDeviceProtocolInfoLength = length;
 			}
-			AddNodeStop( _funcId );
-			sleep(1);
+//			AddNodeStop( _funcId );
+//			sleep(1);
 			break;
 		}
 		case ADD_NODE_STATUS_ADDING_CONTROLLER:
@@ -3859,21 +4031,29 @@ void Driver::CommonAddNodeStatusRequestHandler
 		}
 		case ADD_NODE_STATUS_DONE:
 		{
+			if (state == ControllerState_Failed) {
+				/* if it was a failed add, we just move on */
+				state = ControllerState_Completed;
+				break;
+			}
+
 			Log::Write( LogLevel_Info, nodeId, "ADD_NODE_STATUS_DONE" );
 			bool known = false;
-			
+
+			/* Note that this section differs significantly from upstream in order to determine if the node is new or not */
 			if (m_currentControllerCommand != NULL && m_currentControllerCommand->m_controllerCommandNode != 0xff ) 
 			{
+				LockGuard LG(m_nodeMutex);
 				Node* node = GetNode( m_currentControllerCommand->m_controllerCommandNode );
 				
 				if (node)
-				{
+				{					
           if (!node->IsAddingNode()) {
 					  Log::Write( LogLevel_Info, (int)m_currentControllerCommand->m_controllerCommandNode, "    Node %.3d - Already Known",  (int)m_currentControllerCommand->m_controllerCommandNode);					  
 					  known = true;
 				  }
-				  ReleaseNodes();
         }
+        LG.Unlock();
 				
 				if (!known) {
           Log::Write( LogLevel_Info, nodeId, "Calling Init Node after discovery");
@@ -3882,7 +4062,6 @@ void Driver::CommonAddNodeStatusRequestHandler
 			}
 			
 			state = known ? ControllerState_CompletedNoChange : ControllerState_Completed;
-
 			
 			// Not sure about the new controller function here.
 			if( _funcId != FUNC_ID_ZW_ADD_NODE_TO_NETWORK && m_currentControllerCommand != NULL && m_currentControllerCommand->m_controllerAdded )
@@ -3933,6 +4112,7 @@ bool Driver::EnablePoll
 
 	// confirm that this node exists
 	uint8 nodeId = _valueId.GetNodeId();
+	LockGuard LG(m_nodeMutex);
 	Node* node = GetNode( nodeId );
 	if( node != NULL )
 	{
@@ -3952,7 +4132,6 @@ bool Driver::EnablePoll
 					Log::Write( LogLevel_Detail, "EnablePoll not required to do anything (value is already in the poll list)" );
 					value->Release();
 					m_pollMutex->Unlock();
-					ReleaseNodes();
 					return true;
 				}
 			}
@@ -3964,7 +4143,6 @@ bool Driver::EnablePoll
 			m_pollList.push_back( pe );
 			value->Release();
 			m_pollMutex->Unlock();
-			ReleaseNodes();
 
 			// send notification to indicate polling is enabled
 			Notification* notification = new Notification( Notification::Type_PollingEnabled );
@@ -3977,7 +4155,6 @@ bool Driver::EnablePoll
 
 		// allow the poll thread to continue
 		m_pollMutex->Unlock();
-		ReleaseNodes();
 
 		Log::Write( LogLevel_Info, nodeId, "EnablePoll failed - value not found for node %d", nodeId );
 		return false;
@@ -4004,6 +4181,7 @@ bool Driver::DisablePoll
 
 	// confirm that this node exists
 	uint8 nodeId = _valueId.GetNodeId();
+	LockGuard LG(m_nodeMutex);
 	Node* node = GetNode( nodeId );
 	if( node != NULL)
 	{
@@ -4023,7 +4201,6 @@ bool Driver::DisablePoll
 				value->SetPollIntensity( 0 );
 				value->Release();
 				m_pollMutex->Unlock();
-				ReleaseNodes();
 
 				// send notification to indicate polling is disabled
 				Notification* notification = new Notification( Notification::Type_PollingDisabled );
@@ -4037,7 +4214,6 @@ bool Driver::DisablePoll
 
 		// Not in the list
 		m_pollMutex->Unlock();
-		ReleaseNodes();
 		Log::Write( LogLevel_Info, nodeId, "DisablePoll failed - value not on list");
 		return false;
 	}
@@ -4082,6 +4258,7 @@ bool Driver::isPolled
 	 */
 	// confirm that this node exists
 	uint8 nodeId = _valueId.GetNodeId();
+	LockGuard LG(m_nodeMutex);
 	Node* node = GetNode( nodeId );
 	if( node != NULL)
 	{
@@ -4095,7 +4272,6 @@ bool Driver::isPolled
 				if( bPolled )
 				{
 					m_pollMutex->Unlock();
-					ReleaseNodes();
 					return true;
 				}
 				else
@@ -4110,7 +4286,6 @@ bool Driver::isPolled
 		if( !bPolled )
 		{
 			m_pollMutex->Unlock();
-			ReleaseNodes();
 			return false;
 		}
 		else
@@ -4199,14 +4374,16 @@ void Driver::PollThreadProc
 
 			// reset the poll counter to the full pollIntensity value and push it at the end of the list
 			// release the value object referenced; call GetNode to ensure the node objects are locked during this period
-			(void)GetNode( valueId.GetNodeId() );
-			Value* value = GetValue( valueId );
-			if (!value)
-				continue;
-			pe.m_pollCounter = value->GetPollIntensity();
-			m_pollList.push_back( pe );
-			value->Release();
-			ReleaseNodes();
+			{
+				LockGuard LG(m_nodeMutex);
+				(void)GetNode( valueId.GetNodeId() );
+				Value* value = GetValue( valueId );
+				if (!value)
+					continue;
+				pe.m_pollCounter = value->GetPollIntensity();
+				m_pollList.push_back( pe );
+				value->Release();
+			}
 
 			// If the polling interval is for the whole poll list, calculate the time before the next poll, 
 			// so that all polls can take place within the user-specified interval.
@@ -4220,37 +4397,39 @@ void Driver::PollThreadProc
 				pollInterval /= (int32) m_pollList.size();
 			}
 
-			// Request the state of the value from the node to which it belongs
-			if( Node* node = GetNode( valueId.GetNodeId() ) )
 			{
-				bool requestState = true;
-				if( !node->IsListeningDevice() )
+				LockGuard LG(m_nodeMutex);
+				// Request the state of the value from the node to which it belongs
+				if( Node* node = GetNode( valueId.GetNodeId() ) )
 				{
-					// The device is not awake all the time.  If it is not awake, we mark it
-					// as requiring a poll.  The poll will be done next time the node wakes up.
-					if( WakeUp* wakeUp = static_cast<WakeUp*>( node->GetCommandClass( WakeUp::StaticGetCommandClassId() ) ) )
+					bool requestState = true;
+					if( !node->IsListeningDevice() )
 					{
-						if( !wakeUp->IsAwake() )
+						// The device is not awake all the time.  If it is not awake, we mark it
+						// as requiring a poll.  The poll will be done next time the node wakes up.
+						if( WakeUp* wakeUp = static_cast<WakeUp*>( node->GetCommandClass( WakeUp::StaticGetCommandClassId() ) ) )
 						{
-							wakeUp->SetPollRequired();
-							requestState = false;
+							if( !wakeUp->IsAwake() )
+							{
+								wakeUp->SetPollRequired();
+								requestState = false;
+							}
 						}
 					}
-				}
 
-				if( requestState )
-				{
-					// Request an update of the value
-					CommandClass* cc = node->GetCommandClass( valueId.GetCommandClassId() );
-					if (cc) {
-						uint8 index = valueId.GetIndex();
-						uint8 instance = valueId.GetInstance();
-						Log::Write( LogLevel_Detail, node->m_nodeId, "Polling: %s index = %d instance = %d (poll queue has %d messages)", cc->GetCommandClassName().c_str(), index, instance, m_msgQueue[MsgQueue_Poll].size() );
-						cc->RequestValue( 0, index, instance, MsgQueue_Poll );
+					if( requestState )
+					{
+						// Request an update of the value
+						CommandClass* cc = node->GetCommandClass( valueId.GetCommandClassId() );
+						if (cc) {
+							uint8 index = valueId.GetIndex();
+							uint8 instance = valueId.GetInstance();
+							Log::Write( LogLevel_Detail, node->m_nodeId, "Polling: %s index = %d instance = %d (poll queue has %d messages)", cc->GetCommandClassName().c_str(), index, instance, m_msgQueue[MsgQueue_Poll].size() );
+							cc->RequestValue( 0, index, instance, MsgQueue_Poll );
+						}
 					}
+					
 				}
-
-				ReleaseNodes();
 			}
 
 			m_pollMutex->Unlock();
@@ -4317,7 +4496,7 @@ void Driver::InitAllNodes
 )
 {
 	// Delete all the node data
-	LockNodes();
+	LockGuard LG(m_nodeMutex);
 	for( int i=0; i<256; ++i )
 	{
 		if( m_nodes[i] )
@@ -4326,7 +4505,7 @@ void Driver::InitAllNodes
 			m_nodes[i] = NULL;
 		}
 	}
-	ReleaseNodes();
+	LG.Unlock();
 
 	// Fetch new node data from the Z-Wave network
 	m_controller->PlayInitSequence( this );
@@ -4339,36 +4518,44 @@ void Driver::InitAllNodes
 void Driver::InitNode
 ( 
 		uint8 const _nodeId,
-		bool newNode
-)
+		bool newNode,
+		bool secure,
+		uint8 const *_protocolInfo,
+		uint8 const _length)
 {
 	// Delete any existing node and replace it with a new one
-	LockNodes();
-	if( m_nodes[_nodeId] )
 	{
-		// Remove the original node
-		delete m_nodes[_nodeId];
-		Notification* notification = new Notification( Notification::Type_NodeRemoved );
-		notification->SetHomeAndNodeIds( m_homeId, _nodeId );
-		QueueNotification( notification ); 
-	}
+		LockGuard LG(m_nodeMutex);
+		if( m_nodes[_nodeId] )
+		{
+			// Remove the original node
+			delete m_nodes[_nodeId];
+			Notification* notification = new Notification( Notification::Type_NodeRemoved );
+			notification->SetHomeAndNodeIds( m_homeId, _nodeId );
+			QueueNotification( notification ); 
+		}
 
-	// Add the new node
-	m_nodes[_nodeId] = new Node( m_homeId, _nodeId );
-	if (newNode == true) static_cast<Node *>(m_nodes[_nodeId])->SetAddingNode();
-	ReleaseNodes();
+		// Add the new node
+		m_nodes[_nodeId] = new Node( m_homeId, _nodeId );
+		if (newNode == true) static_cast<Node *>(m_nodes[_nodeId])->SetAddingNode();
+	}
 
 	Notification* notification = new Notification( Notification::Type_NodeAdded );
 	notification->SetHomeAndNodeIds( m_homeId, _nodeId );
 	QueueNotification( notification ); 
 
-	// Request the node info
-	if (Manager::Get()->m_batteryMode) {
-		m_nodes[_nodeId]->SetQueryStage( Node::QueryStage_Complete );
-	} else {
+	if (_length == 0) {
+		// Request the node info
 		m_nodes[_nodeId]->SetQueryStage( Node::QueryStage_ProtocolInfo );
+	} else {
+		if (isNetworkKeySet())
+			m_nodes[_nodeId]->SetSecured(secure);
+		else
+			Log::Write(LogLevel_Info, _nodeId, "Network Key Not Set - Secure Option is %s", secure ? "required" : "not required");
+		m_nodes[_nodeId]->SetProtocolInfo(_protocolInfo, _length);
 	}
-	Log::Write(LogLevel_Info, "Initializing Node. New Node: %s (%s)", static_cast<Node *>(m_nodes[_nodeId])->IsAddingNode() ? "true" : "false", newNode ? "true" : "false");
+	Log::Write(LogLevel_Info, _nodeId, "Initilizing Node. New Node: %s (%s)", static_cast<Node *>(m_nodes[_nodeId])->IsAddingNode() ? "true" : "false", newNode ? "true" : "false");
+
 }
 
 //-----------------------------------------------------------------------------
@@ -4381,10 +4568,10 @@ bool Driver::IsNodeListeningDevice
 )
 {
 	bool res = false;
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( _nodeId ) )
 	{
 		res = node->IsListeningDevice();
-		ReleaseNodes();
 	}
 
 	return res;
@@ -4400,10 +4587,10 @@ bool Driver::IsNodeFrequentListeningDevice
 )
 {
 	bool res = false;
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( _nodeId ) )
 	{
 		res = node->IsFrequentListeningDevice();
-		ReleaseNodes();
 	}
 
 	return res;
@@ -4419,10 +4606,10 @@ bool Driver::IsNodeBeamingDevice
 )
 {
 	bool res = false;
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( _nodeId ) )
 	{
 		res = node->IsBeamingDevice();
-		ReleaseNodes();
 	}
 
 	return res;
@@ -4438,10 +4625,10 @@ bool Driver::IsNodeRoutingDevice
 )
 {
 	bool res = false;
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( _nodeId ) )
 	{
 		res = node->IsRoutingDevice();
-		ReleaseNodes();
 	}
 
 	return res;
@@ -4457,35 +4644,14 @@ bool Driver::IsNodeSecurityDevice
 )
 {
 	bool security = false;
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( _nodeId ) )
 	{
 		security = node->IsSecurityDevice();
-		ReleaseNodes();
 	}
 
 	return security;
 }
-
-
-//-----------------------------------------------------------------------------
-// <Driver::GetSecurityState>
-// Get the security state
-//-----------------------------------------------------------------------------
-Node::SecurityState Driver::GetSecurityState
-(
-	 uint8 const _nodeId
-)
-{
-	Node::SecurityState security = Node::SecurityState_NotSupported;
-	if( Node* node = GetNode( _nodeId ) )
-	{
-		security = node->GetSecurityState();
-		ReleaseNodes();
-	}
-
-	return security;
-}
-
 
 
 //-----------------------------------------------------------------------------
@@ -4498,10 +4664,10 @@ uint32 Driver::GetNodeMaxBaudRate
 )
 {
 	uint32 baud = 0;
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( _nodeId ) )
 	{
 		baud = node->GetMaxBaudRate();
-		ReleaseNodes();
 	}
 
 	return baud;
@@ -4517,10 +4683,10 @@ uint8 Driver::GetNodeVersion
 )
 {
 	uint8 version = 0;
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( _nodeId ) )
 	{
 		version = node->GetVersion();
-		ReleaseNodes();
 	}
 
 	return version;
@@ -4536,10 +4702,10 @@ uint8 Driver::GetNodeSecurity
 )
 {
 	uint8 security = 0;
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( _nodeId ) )
 	{
 		security = node->GetSecurity();
-		ReleaseNodes();
 	}
 
 	return security;
@@ -4555,10 +4721,10 @@ uint8 Driver::GetNodeBasic
 )
 {
 	uint8 basic = 0;
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( _nodeId ) )
 	{
 		basic = node->GetBasic();
-		ReleaseNodes();
 	}
 
 	return basic;
@@ -4574,10 +4740,10 @@ uint8 Driver::GetNodeGeneric
 )
 {
 	uint8 genericType = 0;
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( _nodeId ) )
 	{
 		genericType = node->GetGeneric();
-		ReleaseNodes();
 	}
 
 	return genericType;
@@ -4593,10 +4759,10 @@ uint8 Driver::GetNodeSpecific
 )
 {
 	uint8 specific = 0;
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( _nodeId ) )
 	{
 		specific = node->GetSpecific();
-		ReleaseNodes();
 	}
 
 	return specific;
@@ -4612,14 +4778,27 @@ string Driver::GetNodeType
 		uint8 const _nodeId
 )
 {
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( _nodeId ) )
 	{
-		string str = node->GetType();
-		ReleaseNodes();
-		return str;
+		return node->GetType();
 	}
 
 	return "Unknown";
+}
+
+
+bool Driver::IsNodeZWavePlus
+(
+		uint8 const _nodeId
+)
+{
+	LockGuard LG(m_nodeMutex);
+	if( Node* node = GetNode( _nodeId ) )
+	{
+		return node->IsNodeZWavePlus();
+	}
+	return false;
 }
 
 //-----------------------------------------------------------------------------
@@ -4633,10 +4812,10 @@ uint32 Driver::GetNodeNeighbors
 )
 {
 	uint32 numNeighbors = 0;
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( _nodeId ) )
 	{
 		numNeighbors = node->GetNeighbors(o_neighbors );
-		ReleaseNodes();
 	}
 
 	return numNeighbors;
@@ -4652,11 +4831,10 @@ string Driver::GetNodeManufacturerName
 		uint8 const _nodeId
 )
 {
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( _nodeId ) )
 	{
-		string str = node->GetManufacturerName();
-		ReleaseNodes();
-		return str;
+		return node->GetManufacturerName();
 	}
 
 	return "";
@@ -4672,11 +4850,10 @@ string Driver::GetNodeProductName
 		uint8 const _nodeId
 )
 {
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( _nodeId ) )
 	{
-		string str = node->GetProductName();
-		ReleaseNodes();
-		return str;
+		return node->GetProductName();
 	}
 
 	return "";
@@ -4692,11 +4869,10 @@ string Driver::GetNodeName
 		uint8 const _nodeId
 )
 {
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( _nodeId ) )
 	{
-		string str = node->GetNodeName();
-		ReleaseNodes();
-		return str;
+		return node->GetNodeName();
 	}
 
 	return "";
@@ -4712,11 +4888,10 @@ string Driver::GetNodeLocation
 		uint8 const _nodeId
 )
 {
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( _nodeId ) )
 	{
-		string str = node->GetLocation();
-		ReleaseNodes();
-		return str;
+		return node->GetLocation();
 	}
 
 	return "";
@@ -4727,19 +4902,18 @@ string Driver::GetNodeLocation
 // Get the manufacturer Id string value with the specified ID
 // Returns a copy of the string rather than a const ref for thread safety
 //-----------------------------------------------------------------------------
-string Driver::GetNodeManufacturerId
+uint16 Driver::GetNodeManufacturerId
 (
 		uint8 const _nodeId
 )
 {
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( _nodeId ) )
 	{
-		string str = node->GetManufacturerId();
-		ReleaseNodes();
-		return str;
+		return node->GetManufacturerId();
 	}
 
-	return "";
+	return 0;
 }
 
 //-----------------------------------------------------------------------------
@@ -4747,19 +4921,18 @@ string Driver::GetNodeManufacturerId
 // Get the product type string value with the specified ID
 // Returns a copy of the string rather than a const ref for thread safety
 //-----------------------------------------------------------------------------
-string Driver::GetNodeProductType
+uint16 Driver::GetNodeProductType
 (
 		uint8 const _nodeId
 )
 {
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( _nodeId ) )
 	{
-		string str = node->GetProductType();
-		ReleaseNodes();
-		return str;
+		return node->GetProductType();
 	}
 
-	return "";
+	return 0;
 }
 
 //-----------------------------------------------------------------------------
@@ -4767,20 +4940,130 @@ string Driver::GetNodeProductType
 // Get the product Id string value with the specified ID
 // Returns a copy of the string rather than a const ref for thread safety
 //-----------------------------------------------------------------------------
-string Driver::GetNodeProductId
+uint16 Driver::GetNodeProductId
 (
 		uint8 const _nodeId
 )
 {
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( _nodeId ) )
 	{
-		string str = node->GetProductId();
-		ReleaseNodes();
-		return str;
+		return node->GetProductId();
 	}
 
-	return "";
+	return 0;
 }
+
+
+//-----------------------------------------------------------------------------
+// <Driver::GetNodeDeviceType>
+// Get the node device type as reported in the Z-Wave+ Info report.
+//-----------------------------------------------------------------------------
+uint16 Driver::GetNodeDeviceType
+(
+		uint8 const _nodeId
+)
+{
+	LockGuard LG(m_nodeMutex);
+	if( Node* node = GetNode( _nodeId ) )
+	{
+		return node->GetDeviceType();
+	}
+
+	return 0x00; // unknown
+}
+
+//-----------------------------------------------------------------------------
+// <Driver::GetNodeDeviceTypeString>
+// Get the node DeviceType as a string as reported in the Z-Wave+ Info report.
+//-----------------------------------------------------------------------------
+
+string Driver::GetNodeDeviceTypeString
+(
+		uint8 const _nodeId
+)
+{
+
+	LockGuard LG(m_nodeMutex);
+	if( Node* node = GetNode( _nodeId ) )
+	{
+		return node->GetDeviceTypeString();
+	}
+
+	return ""; // unknown
+}
+
+//-----------------------------------------------------------------------------
+// <Driver::GetNodeRole>
+// Get the node role as reported in the Z-Wave+ Info report.
+//-----------------------------------------------------------------------------
+uint8 Driver::GetNodeRole
+(
+		uint8 const _nodeId
+)
+{
+	LockGuard LG(m_nodeMutex);
+	if( Node* node = GetNode( _nodeId ) )
+	{
+		return node->GetRoleType();
+	}
+
+	return 0x00; // unknown
+}
+
+//-----------------------------------------------------------------------------
+// <Driver::GetNodeRoleString>
+// Get the node role as a string as reported in the Z-Wave+ Info report.
+//-----------------------------------------------------------------------------
+string Driver::GetNodeRoleString
+(
+		uint8 const _nodeId
+)
+{
+	LockGuard LG(m_nodeMutex);
+	if( Node* node = GetNode( _nodeId ) )
+	{
+		return node->GetRoleTypeString();
+	}
+
+	return ""; // unknown
+}
+
+//-----------------------------------------------------------------------------
+// <Driver::GetNodePlusType>
+// Get the node role as a string as reported in the Z-Wave+ Info report.
+//-----------------------------------------------------------------------------
+uint8 Driver::GetNodePlusType
+(
+		uint8 const _nodeId
+)
+{
+	LockGuard LG(m_nodeMutex);
+	if( Node* node = GetNode( _nodeId ) )
+	{
+		return node->GetNodeType();
+	}
+	return 0x00; // unknown
+}
+
+//-----------------------------------------------------------------------------
+// <Driver::GetNodePlusTypeString>
+// Get the node role as a string as reported in the Z-Wave+ Info report.
+//-----------------------------------------------------------------------------
+string Driver::GetNodePlusTypeString
+(
+		uint8 const _nodeId
+)
+{
+	LockGuard LG(m_nodeMutex);
+	if( Node* node = GetNode( _nodeId ) )
+	{
+		return node->GetNodeTypeString();
+	}
+	return ""; // unknown
+}
+
+
 
 //-----------------------------------------------------------------------------
 // <Driver::SetNodeManufacturerName>
@@ -4792,10 +5075,10 @@ void Driver::SetNodeManufacturerName
 		string const& _manufacturerName
 )
 {
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( _nodeId ) )
 	{
 		node->SetManufacturerName( _manufacturerName );
-		ReleaseNodes();
 	}
 }
 
@@ -4809,10 +5092,10 @@ void Driver::SetNodeProductName
 		string const& _productName
 )
 {
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( _nodeId ) )
 	{
 		node->SetProductName( _productName );
-		ReleaseNodes();
 	}
 }
 
@@ -4826,10 +5109,10 @@ void Driver::SetNodeName
 		string const& _nodeName
 )
 {
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( _nodeId ) )
 	{
 		node->SetNodeName( _nodeName );
-		ReleaseNodes();
 	}
 }
 
@@ -4843,10 +5126,10 @@ void Driver::SetNodeLocation
 		string const& _location
 )
 {
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( _nodeId ) )
 	{
 		node->SetLocation( _location );
-		ReleaseNodes();
 	}
 }
 
@@ -4860,10 +5143,10 @@ void Driver::SetNodeLevel
 		uint8 const _level
 )
 {
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( _nodeId ) )
 	{
 		node->SetLevel( _level );
-		ReleaseNodes();
 	}
 }
 
@@ -4876,10 +5159,10 @@ void Driver::SetNodeOn
 		uint8 const _nodeId
 )
 {
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( _nodeId ) )
 	{
 		node->SetNodeOn();
-		ReleaseNodes();
 	}
 }
 
@@ -4892,10 +5175,10 @@ void Driver::SetNodeOff
 		uint8 const _nodeId
 )
 {
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( _nodeId ) )
 	{
 		node->SetNodeOff();
-		ReleaseNodes();
 	}
 }
 
@@ -5040,8 +5323,11 @@ void Driver::DoControllerCommand
 			else
 			{
 				Log::Write( LogLevel_Info, 0, "Add Device" );
-				Msg* msg = new Msg( "AddDevice", 0xff, REQUEST, FUNC_ID_ZW_ADD_NODE_TO_NETWORK, true );
-				msg->Append( m_currentControllerCommand->m_highPower ? ADD_NODE_ANY | OPTION_HIGH_POWER : ADD_NODE_ANY );
+				Msg* msg = new Msg( "ControllerCommand_AddDevice", 0xff, REQUEST, FUNC_ID_ZW_ADD_NODE_TO_NETWORK, true );
+				uint8 options = ADD_NODE_ANY;
+				if (m_currentControllerCommand->m_highPower) options |= OPTION_HIGH_POWER;
+				if (IsAPICallSupported(FUNC_ID_ZW_EXPLORE_REQUEST_INCLUSION)) options |= OPTION_NWI;
+				msg->Append( options);
 				SendMsg( msg, MsgQueue_Command );
 			}
 			break;
@@ -5059,7 +5345,7 @@ void Driver::DoControllerCommand
 			else
 			{
 				Log::Write( LogLevel_Info, 0, "Create New Primary" );
-				Msg* msg = new Msg( "CreateNewPrimary", 0xff, REQUEST, FUNC_ID_ZW_CREATE_NEW_PRIMARY, true );
+				Msg* msg = new Msg( "ControllerCommand_CreateNewPrimary", 0xff, REQUEST, FUNC_ID_ZW_CREATE_NEW_PRIMARY, true );
 				msg->Append( CREATE_PRIMARY_START );
 				SendMsg( msg, MsgQueue_Command );
 			}
@@ -5165,7 +5451,9 @@ void Driver::DoControllerCommand
 				{
 					msg->Append( GetTransmitOptions() );
 				}
+				Log::Write( LogLevel_Info, 0, "Calling SendMsg");
 				SendMsg( msg, MsgQueue_Command );
+				Log::Write( LogLevel_Info, 0, "Done SendMsg");
 			}
 			break;
 		}
@@ -5332,6 +5620,59 @@ void Driver::DoControllerCommand
 	}
 }
 
+
+//-----------------------------------------------------------------------------
+// <Driver::UpdateControllerState>
+// Stop the current controller function
+//-----------------------------------------------------------------------------
+void Driver::UpdateControllerState( ControllerState const _state, ControllerError const _error )
+{
+	if( m_currentControllerCommand != NULL )
+	{
+		if( _state != m_currentControllerCommand->m_controllerState )
+		{
+			m_currentControllerCommand->m_controllerStateChanged = true;
+			m_currentControllerCommand->m_controllerState = _state;
+			switch( _state )
+			{
+				case ControllerState_Error:
+				case ControllerState_Cancel:
+				case ControllerState_Failed:
+				case ControllerState_Sleeping:
+				case ControllerState_NodeFailed:
+				case ControllerState_NodeOK:
+				case ControllerState_Completed:
+				{
+					m_currentControllerCommand->m_controllerCommandDone = true;
+					m_sendMutex->Lock();
+					m_queueEvent[MsgQueue_Controller]->Set();
+					m_sendMutex->Unlock();
+					break;
+				}
+				default:
+				{
+					break;
+				}
+			}
+
+		}
+		Log::Write( LogLevel_Info, 0, "Update controller state: %d", (int)_state);
+		Notification* notification = new Notification( Notification::Type_ControllerCommand );
+		notification->SetHomeAndNodeIds(m_homeId, 0);
+		notification->SetEvent(_state);
+
+		if( _error != ControllerError_None )
+		{
+			m_currentControllerCommand->m_controllerReturnError = _error;
+			/* Create a new Notification Callback */
+			notification->SetNotification(_error);
+		}
+		QueueNotification( notification );
+	}
+}
+
+
+
 //-----------------------------------------------------------------------------
 // <Driver::CancelControllerCommand>
 // Stop the current controller function
@@ -5460,12 +5801,12 @@ void Driver::TestNetwork
 		uint32 const _count
 )
 {
-	LockNodes();
+	LockGuard LG(m_nodeMutex);
 	if( _nodeId == 0 )	// send _count messages to every node
 	{
 		for( int i=0; i<256; ++i )
 		{
-			if( i == m_nodeId ) // ignore sending to ourself
+			if( i == m_Controller_nodeId ) // ignore sending to ourself
 			{
 				continue;
 			}
@@ -5479,7 +5820,7 @@ void Driver::TestNetwork
 			}
 		}
 	}
-	else if( _nodeId != m_nodeId && m_nodes[_nodeId] != NULL )
+	else if( _nodeId != m_Controller_nodeId && m_nodes[_nodeId] != NULL )
 	{
 		NoOperation *noop = static_cast<NoOperation*>( m_nodes[_nodeId]->GetCommandClass( NoOperation::StaticGetCommandClassId() ) );
 		for( int i=0; i < (int)_count; i++ )
@@ -5487,7 +5828,6 @@ void Driver::TestNetwork
 			noop->Set( true );
 		}
 	}
-	ReleaseNodes();
 }
 
 //-----------------------------------------------------------------------------
@@ -5504,7 +5844,7 @@ void Driver::SwitchAllOn
 {
 	SwitchAll::On( this, 0xff );
 
-	LockNodes();
+	LockGuard LG(m_nodeMutex);
 	for( int i=0; i<256; ++i )
 	{
 		if( GetNodeUnsafe( i ) )
@@ -5515,7 +5855,6 @@ void Driver::SwitchAllOn
 			}
 		}
 	}
-	ReleaseNodes();
 }
 
 //-----------------------------------------------------------------------------
@@ -5528,7 +5867,7 @@ void Driver::SwitchAllOff
 {
 	SwitchAll::Off( this, 0xff );
 
-	LockNodes();
+	LockGuard LG(m_nodeMutex);
 	for( int i=0; i<256; ++i )
 	{
 		if( GetNodeUnsafe( i ) )
@@ -5539,7 +5878,6 @@ void Driver::SwitchAllOff
 			}
 		}
 	}
-	ReleaseNodes();
 }
 
 //-----------------------------------------------------------------------------
@@ -5555,14 +5893,13 @@ bool Driver::SetConfigParam
     bool _raw
 )
 {
-	bool res = false;
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( _nodeId ) )
 	{
-		res = node->SetConfigParam( _param, _value, _size, _raw );
-		ReleaseNodes();
+		return node->SetConfigParam( _param, _value, _size, _raw );
 	}
 
-	return res;
+	return false;
 }
 
 //-----------------------------------------------------------------------------
@@ -5575,10 +5912,10 @@ void Driver::RequestConfigParam
 		uint8 const _param
 )
 {
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( _nodeId ) )
 	{
 		node->RequestConfigParam( _param );
-		ReleaseNodes();
 	}
 }
 
@@ -5592,10 +5929,10 @@ uint8 Driver::GetNumGroups
 )
 {
 	uint8 numGroups = 0;
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( _nodeId ) )
 	{
 		numGroups = node->GetNumGroups();
-		ReleaseNodes();
 	}
 
 	return numGroups;
@@ -5613,14 +5950,36 @@ uint32 Driver::GetAssociations
 )
 {
 	uint32 numAssociations = 0;
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( _nodeId ) )
 	{
 		numAssociations = node->GetAssociations( _groupIdx, o_associations );
-		ReleaseNodes();
 	}
 
 	return numAssociations;
 }
+
+//-----------------------------------------------------------------------------
+// <Driver::GetAssociations>
+// Gets the associations for a group
+//-----------------------------------------------------------------------------
+uint32 Driver::GetAssociations
+(
+		uint8 const _nodeId,
+		uint8 const _groupIdx,
+		InstanceAssociation** o_associations
+)
+{
+	uint32 numAssociations = 0;
+	LockGuard LG(m_nodeMutex);
+	if( Node* node = GetNode( _nodeId ) )
+	{
+		numAssociations = node->GetAssociations( _groupIdx, o_associations );
+	}
+
+	return numAssociations;
+}
+
 
 //-----------------------------------------------------------------------------
 // <Driver::GetMaxAssociations>
@@ -5633,10 +5992,10 @@ uint8 Driver::GetMaxAssociations
 )
 {
 	uint8 maxAssociations = 0;
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( _nodeId ) )
 	{
 		maxAssociations = node->GetMaxAssociations( _groupIdx );
-		ReleaseNodes();
 	}
 
 	return maxAssociations;
@@ -5653,10 +6012,10 @@ string Driver::GetGroupLabel
 )
 {
 	string label = "";
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( _nodeId ) )
 	{
 		label = node->GetGroupLabel( _groupIdx );
-		ReleaseNodes();
 	}
 
 	return label;
@@ -5670,13 +6029,14 @@ void Driver::AddAssociation
 (
 		uint8 const _nodeId,
 		uint8 const _groupIdx,
-		uint8 const _targetNodeId
+		uint8 const _targetNodeId,
+		uint8 const _instance
 )
 {
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( _nodeId ) )
 	{
-		node->AddAssociation( _groupIdx, _targetNodeId );
-		ReleaseNodes();
+		node->AddAssociation( _groupIdx, _targetNodeId, _instance );
 	}
 }
 
@@ -5688,13 +6048,14 @@ void Driver::RemoveAssociation
 (
 		uint8 const _nodeId,
 		uint8 const _groupIdx,
-		uint8 const _targetNodeId
+		uint8 const _targetNodeId,
+		uint8 const _instance
 )
 {
+	LockGuard LG(m_nodeMutex);
 	if( Node* node = GetNode( _nodeId ) )
 	{
-		node->RemoveAssociation( _groupIdx, _targetNodeId );
-		ReleaseNodes();
+		node->RemoveAssociation( _groupIdx, _targetNodeId, _instance );
 	}
 }
 
@@ -5944,7 +6305,7 @@ void Driver::SaveButtons
 	snprintf( str, sizeof(str), "%d", 1 );
 	nodesElement->SetAttribute( "version", str);
 
-	LockNodes();
+	LockGuard LG(m_nodeMutex);
 	for( int i = 1; i < 256; i++ )
 	{
 		if( m_nodes[i] == NULL || m_nodes[i]->m_buttonMap.empty() )
@@ -5973,7 +6334,6 @@ void Driver::SaveButtons
 
 		nodesElement->LinkEndChild( nodeElement );
 	}
-	ReleaseNodes();
 
 	string userPath;
 	Options::Get()->GetOptionAsString( "UserPath", &userPath );
@@ -6332,7 +6692,7 @@ void Driver::UpdateNodeRoutes
 		uint8 numGroups = GetNumGroups( _nodeId );
 		uint8 numNodes = 0;
 		uint8 nodes[5];
-		uint8* associations;
+		InstanceAssociation* associations;
 		uint8 i;
 
 		// Determine up to 5 destinations
@@ -6347,14 +6707,14 @@ void Driver::UpdateNodeRoutes
 				uint8 k;
 				for( k = 0; k < numNodes; k++ )
 				{
-					if( nodes[k] == associations[j] )
+					if( nodes[k] == associations[j].m_nodeId )
 					{
 						break;
 					}
 				}
 				if( k >= numNodes && numNodes < sizeof(nodes) )	// not in list so add it
 				{
-					nodes[numNodes++] = associations[j];
+					nodes[numNodes++] = associations[j].m_nodeId;
 				}
 			}
 			if( associations != NULL )
@@ -6373,6 +6733,8 @@ void Driver::UpdateNodeRoutes
 			node->m_numRouteNodes = numNodes;
 			memcpy_s( node->m_routeNodes, sizeof(nodes), nodes, sizeof(nodes) );
 		}
+	} else {
+    Log::Write( LogLevel_Info, _nodeId, "UpdateNodeRoutes not issued for node %d", _nodeId);
 	}
 }
 
@@ -6418,11 +6780,11 @@ void Driver::GetNodeStatistics
 		Node::NodeData* _data
 )
 {
+	LockGuard LG(m_nodeMutex);
 	Node* node = GetNode( _nodeId );
 	if( node != NULL )
 	{
 		node->GetNodeStatistics( _data );
-		ReleaseNodes();
 	}
 }
 
@@ -6480,7 +6842,7 @@ uint8 *Driver::GetNetworkKey() {
 	std::string networkKey;
 	std::vector<std::string> elems;
 	unsigned int tempkey[16];
-	static uint8 keybytes[16];
+	static uint8 keybytes[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 	static bool keySet = false;
 	if (keySet == false) {
 		Options::Get()->GetOptionAsString("NetworkKey", &networkKey );
@@ -6508,3 +6870,193 @@ uint8 *Driver::GetNetworkKey() {
 	}
 	return keybytes;
 }
+
+
+//-----------------------------------------------------------------------------
+// <Driver::SendEncryptedMessage>
+// Send either a NONCE request, or the actual encrypted message, depending what state the Message Currently is in.
+//-----------------------------------------------------------------------------
+bool Driver::SendEncryptedMessage() {
+
+	uint8 *buffer = m_currentMsg->GetBuffer();
+	uint8 length = m_currentMsg->GetLength();
+	m_expectedCallbackId = m_currentMsg->GetCallbackId();
+	Log::Write(LogLevel_Info, m_currentMsg->GetTargetNodeId(), "Sending (%s) message (Callback ID=0x%.2x, Expected Reply=0x%.2x) - %s", c_sendQueueNames[m_currentMsgQueueSource], m_expectedCallbackId, m_expectedReply, m_currentMsg->GetAsString().c_str());
+
+	m_controller->Write( buffer, length );
+	m_currentMsg->clearNonce();
+
+	return true;
+}
+
+
+bool Driver::SendNonceRequest(string logmsg) {
+
+	uint8 m_buffer[11];
+
+	/* construct a standard NONCE_GET message */
+	m_buffer[0] = SOF;
+	m_buffer[1] = 9;					// Length of the entire message
+	m_buffer[2] = REQUEST;
+	m_buffer[3] = FUNC_ID_ZW_SEND_DATA;
+	m_buffer[4] = m_currentMsg->GetTargetNodeId();
+	m_buffer[5] = 2; 					// Length of the payload
+	m_buffer[6] = Security::StaticGetCommandClassId();
+	m_buffer[7] = SecurityCmd_NonceGet;
+	//m_buffer[8] = TRANSMIT_OPTION_ACK | TRANSMIT_OPTION_AUTO_ROUTE;
+	m_buffer[8] = TRANSMIT_OPTION_ACK | TRANSMIT_OPTION_AUTO_ROUTE;
+	/* this is the same as the Actual Message */
+	//m_buffer[9] = m_expectedCallbackId;
+	m_buffer[9] = 2;
+	// Calculate the checksum
+	m_buffer[10] = 0xff;
+	for( uint32 i=1; i<10; ++i )
+	{
+		m_buffer[10] ^= m_buffer[i];
+	}
+	Log::Write(LogLevel_Info, m_currentMsg->GetTargetNodeId(), "Sending (%s) message (Callback ID=0x%.2x, Expected Reply=0x%.2x) - Nonce_Get(%s) - %s:", c_sendQueueNames[m_currentMsgQueueSource], m_expectedCallbackId, m_expectedReply, logmsg.c_str(), PktToString(m_buffer, 10).c_str());
+
+	m_controller->Write(m_buffer, 11);
+
+	return true;
+}
+
+bool Driver::initNetworkKeys(bool newnode) {
+
+	uint8_t EncryptPassword[16] = {0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA};
+	uint8_t AuthPassword[16] = {0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55};
+
+	uint8_t SecuritySchemes[1][16] = {
+			{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }
+	};
+	this->m_inclusionkeySet = newnode;
+	this->AuthKey = new aes_encrypt_ctx;
+	this->EncryptKey = new aes_encrypt_ctx;
+
+	Log::Write(LogLevel_Info, GetControllerNodeId(), "Setting Up %s Network Key for Secure Communications", newnode == true ? "Inclusion" : "Provided");
+
+	if (!isNetworkKeySet()) {
+		Log::Write(LogLevel_Warning, GetControllerNodeId(), "Failed - Network Key Not Set");
+		return false;
+	}
+
+	if (aes_init() == EXIT_FAILURE) {
+		Log::Write(LogLevel_Warning, GetControllerNodeId(), "Failed to Init AES Engine");
+		return false;
+	}
+
+	if (aes_encrypt_key128(newnode == false ? this->GetNetworkKey() : SecuritySchemes[0], this->EncryptKey) == EXIT_FAILURE) {
+		Log::Write(LogLevel_Warning, GetControllerNodeId(), "Failed to Set Initial Network Key for Encryption");
+		return false;
+	}
+
+	if (aes_encrypt_key128(newnode == false ? this->GetNetworkKey() : SecuritySchemes[0], this->AuthKey) == EXIT_FAILURE) {
+		Log::Write(LogLevel_Warning, GetControllerNodeId(), "Failed to Set Initial Network Key for Authentication");
+		return false;
+	}
+
+	uint8 tmpEncKey[32];
+	uint8 tmpAuthKey[32];
+	aes_mode_reset(this->EncryptKey);
+	aes_mode_reset(this->AuthKey);
+
+	if (aes_ecb_encrypt(EncryptPassword, tmpEncKey, 16, this->EncryptKey) == EXIT_FAILURE) {
+		Log::Write(LogLevel_Warning, GetControllerNodeId(), "Failed to Generate Encrypted Network Key for Encryption");
+		return false;
+	}
+	if (aes_ecb_encrypt(AuthPassword, tmpAuthKey, 16, this->AuthKey) == EXIT_FAILURE) {
+		Log::Write(LogLevel_Warning, GetControllerNodeId(), "Failed to Generate Encrypted Network Key for Authentication");
+		return false;
+	}
+
+
+	aes_mode_reset(this->EncryptKey);
+	aes_mode_reset(this->AuthKey);
+	if (aes_encrypt_key128(tmpEncKey, this->EncryptKey) == EXIT_FAILURE) {
+		Log::Write(LogLevel_Warning, GetControllerNodeId(), "Failed to set Encrypted Network Key for Encryption");
+		return false;
+	}
+	if (aes_encrypt_key128(tmpAuthKey, this->AuthKey) == EXIT_FAILURE) {
+		Log::Write(LogLevel_Warning, GetControllerNodeId(), "Failed to set Encrypted Network Key for Authentication");
+		return false;
+	}
+	aes_mode_reset(this->EncryptKey);
+	aes_mode_reset(this->AuthKey);
+	return true;
+}
+
+void Driver::SendNonceKey(uint8 nodeId, uint8 *nonce) {
+
+
+	uint8 m_buffer[19];
+	/* construct a standard NONCE_GET message */
+	m_buffer[0] = SOF;
+	m_buffer[1] = 17;					// Length of the entire message
+	m_buffer[2] = REQUEST;
+	m_buffer[3] = FUNC_ID_ZW_SEND_DATA;
+	m_buffer[4] = nodeId;
+	m_buffer[5] = 10; 					// Length of the payload
+	m_buffer[6] = Security::StaticGetCommandClassId();
+	m_buffer[7] = SecurityCmd_NonceReport;
+	for (int i = 0; i < 8; ++i) {
+		m_buffer[8+i] = nonce[i];
+	}
+	m_buffer[16] = TRANSMIT_OPTION_ACK | TRANSMIT_OPTION_AUTO_ROUTE;
+	/* this is the same as the Actual Message */
+	m_buffer[17] = 1;
+	// Calculate the checksum
+	m_buffer[18] = 0xff;
+	for( uint32 i=1; i<18; ++i )
+	{
+		m_buffer[18] ^= m_buffer[i];
+	}
+	Log::Write(LogLevel_Info, nodeId, "Sending (%s) message (Callback ID=0x%.2x, Expected Reply=0x%.2x) - Nonce_Report - %s:", c_sendQueueNames[m_currentMsgQueueSource], m_buffer[17], m_expectedReply, PktToString(m_buffer, 19).c_str());
+
+	m_controller->Write(m_buffer, 19);
+
+	m_nonceReportSent = nodeId;
+}
+
+aes_encrypt_ctx *Driver::GetAuthKey
+(
+)
+{
+	if( m_currentControllerCommand != NULL &&
+			m_currentControllerCommand->m_controllerCommand == ControllerCommand_AddDevice &&
+			m_currentControllerCommand->m_controllerState == ControllerState_Completed ) {
+		/* we are adding a Node, so our AuthKey is different from normal comms */
+		initNetworkKeys(true);
+	} else if (m_inclusionkeySet) {
+		initNetworkKeys(false);
+	}
+	return this->AuthKey;
+};
+aes_encrypt_ctx *Driver::GetEncKey
+(
+)
+{
+	if( m_currentControllerCommand != NULL &&
+			m_currentControllerCommand->m_controllerCommand == ControllerCommand_AddDevice &&
+			m_currentControllerCommand->m_controllerState == ControllerState_Completed ) {
+		/* we are adding a Node, so our EncryptKey is different from normal comms */
+		initNetworkKeys(true);
+	} else if (m_inclusionkeySet) {
+		initNetworkKeys(false);
+	}
+
+	return this->EncryptKey;
+};
+
+bool Driver::isNetworkKeySet() {
+	std::string networkKey;
+	if (!Options::Get()->GetOptionAsString("NetworkKey", &networkKey )) {
+		return false;
+	} else {
+		return networkKey.length() <= 0 ? false : true;
+	}
+}
+
+
+
+
+

@@ -28,13 +28,19 @@
 #include "Defs.h"
 #include "Msg.h"
 #include "Node.h"
+#include "Manager.h"
+#include "Utils.h"
+#include "ZWSecurity.h"
 #include "platform/Log.h"
 #include "command_classes/MultiInstance.h"
+#include "aes/aescpp.h"
 
 using namespace OpenZWave;
 
-uint8 Msg::s_nextCallbackId = 1;
+/* Callback for normal messages start at 10. Special Messages using a Callback prior to 10 */
+uint8 Msg::s_nextCallbackId = 10;
 
+#define DEBUG 1
 
 //-----------------------------------------------------------------------------
 // <Msg::Msg>
@@ -54,7 +60,6 @@ Msg::Msg
 	m_logText( _logText ),
 	m_bFinal( false ),
 	m_bCallbackRequired( _bCallbackRequired ),
-	m_security(false),
 	m_callbackId( 0 ),
 	m_expectedReply( 0 ),
 	m_expectedCommandClassId( _expectedCommandClassId ),
@@ -65,7 +70,10 @@ Msg::Msg
 	m_maxSendAttempts( MAX_TRIES ),
 	m_instance( 1 ),
 	m_endPoint( 0 ),
-	m_flags( 0 )
+	m_flags( 0 ),
+	m_encrypted ( false ),
+	m_noncerecvd ( false ),
+	m_homeId ( 0 )
 {
 	if( _bReplyRequired )
 	{
@@ -180,7 +188,7 @@ void Msg::Finalize()
 
 		if( 0 == s_nextCallbackId )
 		{
-			s_nextCallbackId = 1;
+			s_nextCallbackId = 10;
 		}
 
 		m_buffer[m_length++] = s_nextCallbackId;	
@@ -212,6 +220,11 @@ void Msg::UpdateCallbackId()
 {
 	if( m_bCallbackRequired )
 	{
+		if( 0 == s_nextCallbackId )
+		{
+			s_nextCallbackId = 10;
+		}
+		
 		// update the callback ID
 		m_buffer[m_length-2] = s_nextCallbackId;
 		m_callbackId = s_nextCallbackId++;
@@ -309,3 +322,34 @@ void Msg::MultiEncap
 		m_logText = str;
 	}
 }
+
+//-----------------------------------------------------------------------------
+// <Node::GetDriver>
+// Get a pointer to our driver
+//-----------------------------------------------------------------------------
+Driver* Msg::GetDriver
+(
+)const
+{
+	return( Manager::Get()->GetDriver( m_homeId ) );
+}
+
+
+uint8* Msg::GetBuffer() {
+	if (m_encrypted == false)
+		return m_buffer;
+	else
+		if (EncyrptBuffer(m_buffer, m_length, GetDriver(), GetDriver()->GetControllerNodeId(), m_targetNodeId, m_nonce, e_buffer)) {
+			return e_buffer;
+		} else {
+			Log::Write(LogLevel_Warning, m_targetNodeId, "Failed to Encyrpt Packet");
+			return NULL;
+		}
+}
+
+
+
+
+
+
+

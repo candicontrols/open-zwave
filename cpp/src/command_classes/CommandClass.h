@@ -52,6 +52,7 @@ namespace OpenZWave
 			RequestFlag_Static		= 0x00000001,	/**< Values that never change. */
 			RequestFlag_Session		= 0x00000002,	/**< Values that change infrequently, and so only need to be requested at start up, or via a manual refresh. */
 			RequestFlag_Dynamic		= 0x00000004,	/**< Values that change and will be requested if polling is enabled on the node. */
+			RequestFlag_AfterMark	= 0x00000008	/**< Values relevent to Controlling CC, not Controlled CC. */
 		};
 
 		CommandClass( uint32 const _homeId, uint8 const _nodeId );
@@ -113,6 +114,8 @@ namespace OpenZWave
 		bool IsSecureSupported()const { return m_SecureSupport; }
 		void ClearSecureSupport() { m_SecureSupport = false; }
 		void SetSecureSupport() { m_SecureSupport = true; }
+		void SetInNIF() { m_inNIF = true; }
+		bool IsInNIF() { return m_inNIF; }
 
 		// Helper methods
 		string ExtractValue( uint8 const* _data, uint8* _scale, uint8* _precision, uint8 _valueOffset = 1 )const;
@@ -160,6 +163,8 @@ OPENZWAVE_EXPORT_WARNINGS_ON
 		bool		m_isSecured;		// is this command class secured with the Security Command Class
 		bool		m_SecureSupport; 	// Does this commandclass support secure encryption (eg, the Security CC doesn't encrypt itself, so it doesn't support encryption)
 		std::vector<RefreshValue *> m_RefreshClassValues; // what Command Class Values should we refresh ?
+		bool		m_inNIF; 			// Was this command class present in the NIF Frame we recieved (or was it created from our device_classes.xml file, or because it was in the Security SupportedReport message
+
 
 	//-----------------------------------------------------------------------------
 	// Record which items of static data have been read from the device

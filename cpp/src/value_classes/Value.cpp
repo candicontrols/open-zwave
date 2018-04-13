@@ -59,7 +59,8 @@ static char const* c_typeName[] =
 	"short",
 	"string",
 	"button",
-	"raw"
+	"raw",
+	"invalid type"
 };
 
 //-----------------------------------------------------------------------------
@@ -113,8 +114,8 @@ Value::Value
 	m_refreshTime(0),
 	m_verifyChanges( false ),
 	m_label(""),
-  m_units(""),
-  m_help(""),
+	m_units(""),
+	m_help(""),
 	m_readOnly( false ),
 	m_writeOnly( false ),
 	m_isSet( false ),
@@ -358,7 +359,7 @@ bool Value::Set
 		return false;
 	}
 
-		 // retrieve the driver, node and commandclass object for this value
+	// retrieve the driver, node and commandclass object for this value
 	bool res = false;
 	Node* node = NULL;
 	if( Driver* driver = Manager::Get()->GetDriver( m_id.GetHomeId() ) )
@@ -548,6 +549,11 @@ char const* Value::GetTypeNameFromEnum
 	ValueID::ValueType _type
 )
 {
+	if (_type > (int)ValueID::ValueType_Max) {
+		Log::Write(LogLevel_Warning, "Value::GetTypeNameFromEnum is out of range: %d", (int)_type);
+		return c_typeName[ValueID::ValueType_Max+1];
+	}
+
 	return c_typeName[_type];
 }
 
@@ -560,7 +566,7 @@ int Value::VerifyRefreshedValue
 	void* _originalValue,
 	void* _checkValue,
 	void* _newValue,
-	int _type,
+	ValueID::ValueType _type,
 	int _length	// = 0
 )
 {
@@ -581,38 +587,44 @@ int Value::VerifyRefreshedValue
 	{
 		switch( _type )
 		{
-			case 1:			// string
+			case ValueID::ValueType_Button:			// Button is stored as a bool
+			case ValueID::ValueType_Bool:			// bool
 			{
-				Log::Write( LogLevel_Detail, m_id.GetNodeId(), "Refreshed Value: old value=%s, new value=%s, type=%s", ((string*)_originalValue)->c_str(), ((string*)_newValue)->c_str(), "string" );
+				Log::Write( LogLevel_Detail, m_id.GetNodeId(), "Refreshed Value: old value=%s, new value=%s, type=%s", *((bool*)_originalValue)?"true":"false", *((uint8*)_newValue)?"true":"false", GetTypeNameFromEnum(_type) );
 				break;
 			}
-			case 2:			// short
+			case ValueID::ValueType_Byte:			// byte
 			{
-				Log::Write( LogLevel_Detail, m_id.GetNodeId(), "Refreshed Value: old value=%d, new value=%d, type=%s", *((short*)_originalValue), *((short*)_newValue), "short");
+				Log::Write( LogLevel_Detail, m_id.GetNodeId(), "Refreshed Value: old value=%d, new value=%d, type=%s", *((uint8*)_originalValue), *((uint8*)_newValue), GetTypeNameFromEnum(_type) );
 				break;
 			}
-			case 3:			// int32
+			case ValueID::ValueType_Decimal:		// decimal is stored as a string, so treat it as a string here
+			case ValueID::ValueType_String:			// string
 			{
-				Log::Write( LogLevel_Detail, m_id.GetNodeId(), "Refreshed Value: old value=%d, new value=%d, type=%s", *((int32*)_originalValue), *((int32*)_newValue), "int32" );
+				Log::Write( LogLevel_Detail, m_id.GetNodeId(), "Refreshed Value: old value=%s, new value=%s, type=%s", ((string*)_originalValue)->c_str(), ((string*)_newValue)->c_str(), GetTypeNameFromEnum(_type) );
 				break;
 			}
-			case 4:			// uint8
+			case ValueID::ValueType_Short:			// short
 			{
-				Log::Write( LogLevel_Detail, m_id.GetNodeId(), "Refreshed Value: old value=%d, new value=%d, type=%s", *((uint8*)_originalValue), *((uint8*)_newValue), "uint8" );
+				Log::Write( LogLevel_Detail, m_id.GetNodeId(), "Refreshed Value: old value=%d, new value=%d, type=%s", *((short*)_originalValue), *((short*)_newValue), GetTypeNameFromEnum(_type));
 				break;
 			}
-			case 5:			// bool
+			case ValueID::ValueType_List:			// List Type is treated as a int32
+			case ValueID::ValueType_Int:			// int32
 			{
-				Log::Write( LogLevel_Detail, m_id.GetNodeId(), "Refreshed Value: old value=%s, new value=%s, type=%s", *((bool*)_originalValue)?"true":"false", *((uint8*)_newValue)?"true":"false", "bool" );
+				Log::Write( LogLevel_Detail, m_id.GetNodeId(), "Refreshed Value: old value=%d, new value=%d, type=%s", *((int32*)_originalValue), *((int32*)_newValue), GetTypeNameFromEnum(_type) );
 				break;
 			}
-			case 6:			// raw
+			case ValueID::ValueType_Raw:			// raw
 			{
-				Log::Write( LogLevel_Detail, m_id.GetNodeId(), "Refreshed Value: old value=%x, new value=%x, type=raw", _originalValue, _newValue );
+				Log::Write( LogLevel_Detail, m_id.GetNodeId(), "Refreshed Value: old value=%x, new value=%x, type=%s", _originalValue, _newValue, GetTypeNameFromEnum(_type) );
 				break;
 			}
-			default:
+			case ValueID::ValueType_Schedule:		// Schedule Type
 			{
+				Log::Write( LogLevel_Detail, m_id.GetNodeId(), "Refreshed Value: old value=%s, new value=%s, type=%s", _originalValue, _newValue, GetTypeNameFromEnum(_type) );
+				/* we cant support verifyChanges yet... so always unset this */
+				m_verifyChanges = false;
 				break;
 			}
 		}
@@ -634,23 +646,29 @@ int Value::VerifyRefreshedValue
 	bool bOriginalEqual = false;
 	switch( _type )
 	{
-	case 1:			// string
+	case ValueID::ValueType_Decimal:		// Decimal is stored as a string
+	case ValueID::ValueType_String:			// string
 		bOriginalEqual = ( strcmp( ((string*)_originalValue)->c_str(), ((string*)_newValue)->c_str() ) == 0 );
 		break;
-	case 2:			// short
+	case ValueID::ValueType_Short:			// short
 		bOriginalEqual = ( *((short*)_originalValue) == *((short*)_newValue) );
 		break;
-	case 3:			// int32
+	case ValueID::ValueType_List:			// List Type is treated as a int32
+	case ValueID::ValueType_Int:			// int
 		bOriginalEqual = ( *((int32*)_originalValue) == *((int32*)_newValue) );
 		break;
-	case 4:			// uint8
+	case ValueID::ValueType_Byte:			// uint8
 		bOriginalEqual = ( *((uint8*)_originalValue) == *((uint8*)_newValue) );
 		break;
-	case 5:			// bool
+	case ValueID::ValueType_Button:			// Button is stored as a bool
+	case ValueID::ValueType_Bool:			// bool
 		bOriginalEqual = ( *((bool*)_originalValue) == *((bool*)_newValue) );
 		break;
-	case 6:			// raw
+	case ValueID::ValueType_Raw:			// raw
 		bOriginalEqual = ( memcmp( _originalValue, _newValue, _length ) == 0 );
+		break;
+	case ValueID::ValueType_Schedule:		// Schedule
+		/* Should not get here */
 		break;
 	}
 
@@ -676,23 +694,29 @@ int Value::VerifyRefreshedValue
 		bool bCheckEqual = false;
 		switch( _type )
 		{
-		case 1:			// string
+		case ValueID::ValueType_Decimal:		// Decimal is stored as a string
+		case ValueID::ValueType_String:			// string
 			bCheckEqual = ( strcmp( ((string*)_checkValue)->c_str(), ((string*)_newValue)->c_str() ) == 0 );
 			break;
-		case 2:			// short
+		case ValueID::ValueType_Short:			// short
 			bCheckEqual = ( *((short*)_checkValue) == *((short*)_newValue) );
 			break;
-		case 3:			// int32
+		case ValueID::ValueType_List:			// List Type is treated as a int32
+		case ValueID::ValueType_Int:			// int32
 			bCheckEqual = ( *((int32*)_checkValue) == *((int32*)_newValue) );
 			break;
-		case 4:			// uint8
+		case ValueID::ValueType_Byte:			// uint8
 			bCheckEqual = ( *((uint8*)_checkValue) == *((uint8*)_newValue) );
 			break;
-		case 5:			// bool
+		case ValueID::ValueType_Button:			// Button is stored as a bool
+		case ValueID::ValueType_Bool:			// bool
 			bCheckEqual = ( *((bool*)_checkValue) == *((bool*)_newValue) );
 			break;
-		case 6:
+		case ValueID::ValueType_Raw:
 			bCheckEqual = ( memcmp( _checkValue, _newValue, _length ) == 0 );
+			break;
+		case ValueID::ValueType_Schedule:
+			/* Should not get here */
 			break;
 		}
 		if( bCheckEqual )

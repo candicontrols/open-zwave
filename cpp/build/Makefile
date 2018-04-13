@@ -109,6 +109,7 @@ $(top_srcdir)/cpp/src/vers.cpp:
 	@echo 'uint16_t ozw_vers_major = $(VERSION_MAJ);' >> $(top_srcdir)/cpp/src/vers.cpp
 	@echo 'uint16_t ozw_vers_minor = $(VERSION_MIN);' >> $(top_srcdir)/cpp/src/vers.cpp
 	@echo 'uint16_t ozw_vers_revision = $(VERSION_REV);' >> $(top_srcdir)/cpp/src/vers.cpp
+	@echo 'char ozw_version_string[] = "candi/git";' >> $(top_srcdir)/cpp/src/vers.cpp
 
 #$(OBJDIR)/vers.o:	$(top_builddir)/vers.cpp
 

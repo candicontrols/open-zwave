@@ -227,7 +227,7 @@ bool ValueList::SetByValue
 {
 	// create a temporary copy of this value to be submitted to the Set() call and set its value to the function param
   	ValueList* tempValue = new ValueList( *this );
-	tempValue->m_valueIdx = _value;
+	tempValue->m_valueIdx = GetItemIdxByValue(_value);
 
 	// Set the value in the device.
 	bool ret = ((Value*)tempValue)->Set();
@@ -275,7 +275,7 @@ void ValueList::OnValueRefreshed
 		return;
 	}
 
-	switch( VerifyRefreshedValue( (void*) &m_valueIdx, (void*) &m_valueIdxCheck, (void*) &index, 3) )
+	switch( VerifyRefreshedValue( (void*) &m_valueIdx, (void*) &m_valueIdxCheck, (void*) &index, ValueID::ValueType_List) )
 	{
 	case 0:		// value hasn't changed, nothing to do
 		break;
@@ -352,6 +352,40 @@ bool ValueList::GetItemLabels
 	return false;
 }
 
+//-----------------------------------------------------------------------------
+// <ValueList::GetItemValues>
+// Fill a vector with the item values
+//-----------------------------------------------------------------------------
+bool ValueList::GetItemValues
+(
+	vector<int32>* o_values
+)
+{
+	if( o_values )
+	{
+		for( vector<Item>::iterator it = m_items.begin(); it != m_items.end(); ++it )
+		{
+			o_values->push_back( (*it).m_value );
+		}
+
+		return true;
+	}
+
+	return false;
+}
+
+//-----------------------------------------------------------------------------
+// <ValueList::GetItem>
+// Get the Item at the Currently selected Index
+//-----------------------------------------------------------------------------
+ValueList::Item const *ValueList::GetItem() const {
+	try {
+		return &m_items.at(m_valueIdx);
+	} catch (const std::out_of_range& oor) {
+		Log::Write(LogLevel_Warning, "Invalid Index Set on ValueList");
+		return NULL;
+	}
+}
 
 
 

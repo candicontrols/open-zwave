@@ -66,7 +66,8 @@
 		<Product type="0002" id="0036" name="Recessed Door Sensor" config="aeon_labs/recessed_doorsensor.xml"/>
 		<Product type="0004" id="0025" name="Z-Wave Repeater"/>
 		<Product type="0101" id="005a" name="Z-Stick Gen5"/>
-		<Product type="0102" id="0064" name="Aeotec Multisensor"/>
+		<Product type="0102" id="0064" name="Aeotec Multisensor" config="aeon_labs/multisensor6.xml"/>
+    <Product type="0103" id="0060" name="Aeotec Smart Switch 6" config="aeon_labs/multiswitch6.xml"/>
 	</Manufacturer>
         <Manufacturer id="0111" name="Airline Mechanical">
                 <Product type="8200" id="0200" name="ZDS-100"/>
@@ -162,7 +163,7 @@
 	<Manufacturer id="0087" name="Eka Systems">
 	</Manufacturer>
 	<Manufacturer id="0033" name="Electronic Solutions Inc">
-		<Product type="5250" id="02" name="DBMZ Motor Control"/>
+		<Product type="5250" id="0002" name="DBMZ Motor Control"/>
 	</Manufacturer>
 	<Manufacturer id="0034" name="El-Gev Electronics">
 	</Manufacturer>
@@ -311,6 +312,7 @@
 	</Manufacturer>
 	<Manufacturer id="0039" name="Honeywell">
 		<Product type="0011" id="0001" name="TH8320ZW1000 Touchscreen Thermostat" config="honeywell/th8320zw1000.xml"/>
+		<Product type="0011" id="0003" name="TH8320ZW1000 Touchscreen Thermostat" config="honeywell/th8320zw1000.xml"/>
 	</Manufacturer>
 	<Manufacturer id="0059" name="Horstmann">
 		<Product type="0001" id="0001" name="ASR-RF Thermostat Receiver"/>

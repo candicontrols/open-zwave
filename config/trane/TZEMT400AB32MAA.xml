@@ -5,7 +5,7 @@
 
 	<!-- Trane Thermostat Model TZEMT400AB32MAA -->
 
-	  <CommandClass id="49" name="COMMAND_CLASS_SENSOR_MULTILEVEL" version="1" request_flags="4" create_vars="true">
+  <CommandClass id="49" name="COMMAND_CLASS_SENSOR_MULTILEVEL" version="1" request_flags="4" create_vars="true">
     <Instance index="1" />
     <Value type="decimal" genre="user" instance="1" index="1" label="Temperature" units="F" read_only="true" write_only="false" verify_changes="false" poll_intensity="0" min="0" max="0" value="75" />
   </CommandClass>
@@ -45,8 +45,8 @@
 
   <CommandClass id="67" name="COMMAND_CLASS_THERMOSTAT_SETPOINT" base="0">
     <Instance index="1" />
-    <Value type="decimal" genre="user" instance="1" index="1" label="Heating 1" units="F" read_only="false" write_only="false" min="0" max="0" value="65" />
-    <Value type="decimal" genre="user" instance="1" index="2" label="Cooling 1" units="F" read_only="false" write_only="false" min="0" max="0" value="80" />
+    <Value type="decimal" genre="user" instance="1" index="1" label="HeatSetPoint" units="F" read_only="false" write_only="false" min="0" max="0" value="65" />
+    <Value type="decimal" genre="user" instance="1" index="2" label="CoolSetPoint" units="F" read_only="false" write_only="false" min="0" max="0" value="80" />
   </CommandClass>
 
   <CommandClass id="68" name="COMMAND_CLASS_THERMOSTAT_FAN_MODE" version="1" request_flags="4" create_vars="true">
